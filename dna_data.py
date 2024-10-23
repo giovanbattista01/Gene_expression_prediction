@@ -5,6 +5,7 @@ import h5py
 from Bio import SeqIO
 import os
 import pandas as pd
+from tqdm import tqdm
 
 
 def one_hot_encode(seq):
@@ -64,7 +65,7 @@ def create_dna_dataset(dataset, gex_dataset, fasta_file, chrs, tss_centers, stra
 
     chrom_lengths = get_chromosome_lengths(fasta_file)
 
-    for i in range(len(tss_centers)):
+    for i in tqdm(range(len(tss_centers))):
 
         left = max(0, tss_centers[i] - halfspan)
         right = min(tss_centers[i] + halfspan, chrom_lengths[chrs[i]] -1 )
@@ -87,7 +88,7 @@ def create_dna_dataset(dataset, gex_dataset, fasta_file, chrs, tss_centers, stra
         gex_dataset[i] = gex[i]
 
 
-gene_names, chroms, tss_centers, strands, gex = load_gene_info('train',1)
+gene_names, chroms, tss_centers, strands, gex = load_gene_info('val',1)
 
 
 SEQ_LENGTH = 200000
@@ -98,7 +99,7 @@ IN_CHANNELS = 4
 
 base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/my_dna_data/'
 
-with h5py.File(base_dir + 'data1.h5', 'w') as h5file:
+with h5py.File(base_dir + 'data1_val.h5', 'w') as h5file:
     # Create a dataset for one-hot encoded nucleotides as int8
     dataset = h5file.create_dataset(
         'dna_data', 

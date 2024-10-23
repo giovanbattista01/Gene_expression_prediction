@@ -172,19 +172,31 @@ linear_dim = 100
 
 model = Enformer(conv_filters, dim, linear_dim)
 
-class SimpleDataset(Dataset):
-    def __init__(self, X, y):
+class HDF5Dataset(Dataset):
+    def __init__(self, h5_file_path, transform=None):
         
-        self.X = X
-        self.y = y 
+        self.h5_file_path = h5_file_path
+        self.transform = transform
+        
+        self.h5_file = h5py.File(h5_file_path, 'r')
+
+        self.X = self.h5_file['dna_data']
+        self.y = self.h5_file['gex_data']
 
     def __len__(self):
         return len(self.y)
-
+    
     def __getitem__(self, idx):
-        sample = self.X[idx]
-        label = self.y[idx]
-        return sample, label
+        X = self.X[idx]
+        y = self.y[idx]
+        
+        if self.transform:
+            data = self.transform(data)
+        
+        return torch.tensor(X), torch.tensor(y)
+    
+    def close(self):
+        self.h5_file.close()
 
 
 batch_size = 4
@@ -192,11 +204,15 @@ num_epochs = 5
 learning_rate = 0.0001
 
 
-train_dataset = SimpleDataset(X_train, y_train)
-val_dataset = SimpleDataset(X_val, y_val)
+
+
+train_dataset = HDF5Dataset(X_train, y_train)
+val_dataset = HDF5Dataset(X_val, y_val)
 
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
+
+
 
 
 
