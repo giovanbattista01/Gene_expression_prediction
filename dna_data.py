@@ -2,6 +2,9 @@ from pyfaidx import Fasta
 import time
 import numpy as np
 import h5py
+from Bio import SeqIO
+import os
+import pandas as pd
 
 
 def one_hot_encode(seq):
@@ -9,29 +12,23 @@ def one_hot_encode(seq):
                't': [0, 1, 0, 0],
                'c': [0, 0, 1, 0],
                'g': [0, 0, 0, 1],
-               'n': [0, 0, 0, 0]}
+               'n': [0, 0, 0, 0],
+               'A': [1, 0, 0, 0],
+               'T': [0, 1, 0, 0],
+               'C': [0, 0, 1, 0],
+               'G': [0, 0, 0, 1],
+               'N': [0, 0, 0, 0]}
     return np.array([mapping[base] for base in seq])
 
 def reverse_complement(seq):
     """Return the reverse complement of a DNA sequence."""
-    complement = {'a': 't', 't': 'a', 'c': 'g', 'g': 'c'}
+    complement = {'a': 't', 't': 'a', 'c': 'g', 'g': 'c','A': 'T', 'T': 'A', 'C': 'G', 'G': 'C','n':'n','N':'N'}
     return ''.join(complement[base] for base in reversed(seq))
 
 
-from Bio import SeqIO
-
 def get_chromosome_lengths(fasta_file):
-    chromosome_lengths = {}
-    
-    for record in SeqIO.parse(fasta_file, "fasta"):
-        chromosome_lengths[record.id] = len(record.seq)
-    
+    chromosome_lengths = {chrom: len(fasta_file[chrom]) for chrom in fasta_file.keys()}
     return chromosome_lengths
-
-hg38_path = '/home/vegeta/Downloads/hg38.fa'
-
-
-genome = Fasta(hg38_path)
 
 
 def load_gene_info(mode,chrom_set):   # mode can be train,val or test, chrom_set can be 1,2,3
@@ -58,26 +55,27 @@ def pad(seq, mode, amount):
         return 'n'*amount + seq
     elif mode == 'right':
         return seq + 'n' * amount
-    else print('error in padding')
+    else:
+         print('error in padding')
 
 
 
-def create_dna_dataset(dataset):
+def create_dna_dataset(dataset, gex_dataset, fasta_file, chrs, tss_centers, strands, gex,  halfspan ):
 
-    chrom_lenghts = get_chromosome_lengths(fasta_file)
+    chrom_lengths = get_chromosome_lengths(fasta_file)
 
-    for i in range(tss_centers):
+    for i in range(len(tss_centers)):
 
         left = max(0, tss_centers[i] - halfspan)
-        right = min(tss_centers[i] + halfspan, chrom_lengths[chrs[i]] )
+        right = min(tss_centers[i] + halfspan, chrom_lengths[chrs[i]] -1 )
 
         seq = genome[chrs[i]][left:right].seq
 
         if left == 0:
             seq = pad(seq, 'left', halfspan - tss_centers[i] )
         
-        if right == chrom_lengths[chrs[i]]:
-            seq = pad(seq, 'right', tss_centers[i] + halfspan - chrom_lengths[chrs[i]] )
+        if right == chrom_lengths[chrs[i]] - 1 :
+            seq = pad(seq, 'right', tss_centers[i] + halfspan - chrom_lengths[chrs[i]] + 1 )
 
         if strands[i]=='-':
             seq = reverse_complement(seq)
@@ -85,6 +83,8 @@ def create_dna_dataset(dataset):
         ohe_seq = one_hot_encode(seq)
 
         dataset[i] = ohe_seq
+
+        gex_dataset[i] = gex[i]
 
 
 gene_names, chroms, tss_centers, strands, gex = load_gene_info('train',1)
@@ -96,13 +96,31 @@ NUM_SAMPLES = len(gene_names)
 
 IN_CHANNELS = 4
 
-with h5py.File('X.h5', 'w') as h5file:
+base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/my_dna_data/'
+
+with h5py.File(base_dir + 'data1.h5', 'w') as h5file:
     # Create a dataset for one-hot encoded nucleotides as int8
     dataset = h5file.create_dataset(
         'dna_data', 
         (NUM_SAMPLES, SEQ_LENGTH, IN_CHANNELS), 
         dtype='int8'  # Store as int8 for one-hot encoding
     )
+
+    gex_dataset = h5file.create_dataset(
+        'gex_data',
+        (NUM_SAMPLES,),  
+        dtype='float32' 
+    )
+
+    halfspan = int(SEQ_LENGTH // 2)
+
+    hg38_path = '/home/vegeta/Downloads/hg38.fa'
+
+
+    genome = Fasta(hg38_path)
+
+
+    create_dna_dataset(dataset, gex_dataset, genome, chroms, tss_centers, strands, gex, halfspan)
 
 
 

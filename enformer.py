@@ -81,7 +81,7 @@ class Transformer(nn.Module):
         self.linear2 = nn.Linear(embed_dim * 2, embed_dim )
 
     def forward(self, x):
-        x1 = pos_encoding(x)
+        x1 = self.pos_encoding(x)
         x1 = self.layer_norm(x1)
         x1, _ = self.attention(x1, x1, x1)
         x1 = self.dropout(x1)
@@ -97,14 +97,22 @@ class Transformer(nn.Module):
         return x + x2  # Residual connection
 
 
-class ConvBlock(dim_in, dim_out, kernel_size=1):
-    return nn.Sequential(nn.BatchNorm1d(dim_in), nn.GELU(), nn.Conv1d(dim_in, dim_out, kernel_size, padding=kernel_size // 2) )
+class ConvBlock(nn.Module):
+    def __init__(self, dim_in, dim_out, kernel_size=1):
+        super(ConvBlock, self).__init__()
+        self.block = nn.Sequential(
+            nn.BatchNorm1d(dim_in),
+            nn.GELU(),
+            nn.Conv1d(dim_in, dim_out, kernel_size, padding=kernel_size // 2)
+        )
 
-class stem(nn.Module):
+    def forward(self, x):
+        return self.block(x)
+
+class Stem(nn.Module):
     def __init__(self,half_dim):
-        super(stem, self).__init__()
-        self.half_dim = half_dim
-        self.first_conv = nn.Conv1d(4,self.half_dim,15,padding=7)
+        super(Stem, self).__init__()
+        self.first_conv = nn.Conv1d(4,half_dim,15,padding=7)
         self.conv_block = ConvBlock(half_dim,half_dim)
         self.pool = AttentionPool(half_dim)
 
@@ -130,20 +138,65 @@ class ConvLayer(nn.Module):
         return x
 
 
-
 class Enformer(nn.Module):
-    def __init__(self, conv_filters):
+    def __init__(self, conv_filters, dim, linear):
         super(Enformer, self).__init__()
-        self.stem = stem(some_kind_of_dim)
+        self.stem = Stem(dim // 2)
         conv_tower = []
-        for filter in conv_filters:
-            conv_tower.append(ConvLayer(filter[0],filter[1]))
+        for dim_in, dim_out in zip(conv_filters[:-1], conv_filters[1:]):
+            conv_tower.append(ConvLayer(dim_in, dim_out))
         self.conv_tower  = nn.Sequential(*conv_tower)
 
-        self.transformer = Transformer()
+        self.transformer = Transformer(dim)
 
-    
+        self.linear1 = nn.Linear(dim, linear)
+        self.linear2 = nn.Linear(linear,1)
 
+    def forward(self, x ):
+        x = self.stem(x)
+        x = self.conv_tower(x)
+        x = self.transformer(x)
+        x = F.gelu( self.linear1(x) )
+        x = self.linear2(x)
+        return x
+
+
+
+dim = 128
+
+conv_n = 5
+conv_filters = np.linspace(dim // 2, dim, num=5 ).astype(int)
+
+linear_dim = 100
+
+
+model = Enformer(conv_filters, dim, linear_dim)
+
+class SimpleDataset(Dataset):
+    def __init__(self, X, y):
+        
+        self.X = X
+        self.y = y 
+
+    def __len__(self):
+        return len(self.y)
+
+    def __getitem__(self, idx):
+        sample = self.X[idx]
+        label = self.y[idx]
+        return sample, label
+
+
+batch_size = 4
+num_epochs = 5
+learning_rate = 0.0001
+
+
+train_dataset = SimpleDataset(X_train, y_train)
+val_dataset = SimpleDataset(X_val, y_val)
+
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
 
 
 
