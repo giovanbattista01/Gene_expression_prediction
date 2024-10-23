@@ -132,8 +132,19 @@ class ConvLayer(nn.Module):
 
 
 class Enformer(nn.Module):
-    def __init__(self):
+    def __init__(self, conv_filters):
         super(Enformer, self).__init__()
+        self.stem = stem(some_kind_of_dim)
+        conv_tower = []
+        for filter in conv_filters:
+            conv_tower.append(ConvLayer(filter[0],filter[1]))
+        self.conv_tower  = nn.Sequential(*conv_tower)
+
+        self.transformer = Transformer()
+
+    
+
+
 
 
 
