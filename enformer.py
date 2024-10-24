@@ -4,6 +4,10 @@ import torch.nn.functional as F
 import math
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
+from scipy.stats import spearmanr
+import h5py
+from tqdm import tqdm
+import torch.optim as optim
 
 
 torch.set_printoptions(sci_mode=False)
@@ -58,7 +62,7 @@ class AttentionPool(nn.Module):
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model: int, max_len: int = 200000):
         super(PositionalEncoding, self).__init__()
-        self.encoding = torch.zeros(max_len, d_model)
+        self.encoding = torch.zeros(max_len, d_model).to('cuda')
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)  # [0,1,2,3,4,5,6, ...]
         div_term = torch.exp(torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model)) # [1, 0.86, 0.74, ... 0.0001]
         self.encoding[:, 0::2] = torch.sin(position * div_term)
@@ -152,10 +156,11 @@ class Enformer(nn.Module):
 
         self.transformer = Transformer(dim)
 
-        self.linear1 = nn.Linear(dim * (initial_seq_len / pow(2,len(conv_filters))) , linear)
+        self.linear1 = nn.Linear(dim * (initial_seq_len // pow(2,len(conv_filters))) , linear)
         self.linear2 = nn.Linear(linear,1)
 
     def forward(self, x ):
+        x = x.transpose(1,2)
         x = self.stem(x)
         x = self.conv_tower(x)
         x = x.transpose(1,2)
@@ -163,7 +168,7 @@ class Enformer(nn.Module):
         x = x.reshape(x.size(0),x.size(1)*x.size(2))
         x = F.gelu( self.linear1(x) )
         x = self.linear2(x)
-        return x
+        return x.squeeze()
 
 
 
@@ -185,13 +190,60 @@ class HDF5Dataset(Dataset):
         X = self.X[idx]
         y = self.y[idx]
         
+        X = torch.tensor(X, dtype=torch.float32)
+        y = torch.tensor(y, dtype=torch.float32)
+        
         if self.transform:
             data = self.transform(data)
         
-        return torch.tensor(X), torch.tensor(y)
+        return X,y
     
     def close(self):
         self.h5_file.close()
+
+
+class RankNet1DLoss(nn.Module):
+    def __init__(self, model = None, l2_lambda=0):
+        super(RankNet1DLoss, self).__init__()
+        self.l2_lambda = l2_lambda
+        self.model = model
+    
+    def forward(self, y_pred, y_true):
+        """
+        y_pred: Tensor of shape (batch_size,)
+            The predicted scores for each item.
+        y_true: Tensor of shape (batch_size,)
+            The ground truth scores for each item.
+        """
+        # Ensure the predictions and targets are 1D tensors
+        assert y_pred.dim() == 1 and y_true.dim() == 1, "Input tensors must be 1D"
+        
+        # Get the pairwise differences for the ground truth and predictions
+        diff_true = y_true.unsqueeze(0) - y_true.unsqueeze(1)  # Shape: (batch_size, batch_size)
+        diff_pred = y_pred.unsqueeze(0) - y_pred.unsqueeze(1)  # Shape: (batch_size, batch_size)
+        
+        # Only consider pairs where the true ranks are different
+        mask = (diff_true > 0).float()  # Shape: (batch_size, batch_size)
+        
+        # Apply the sigmoid function to the predicted differences
+        P_ij = torch.sigmoid(diff_pred).clamp(1e-7, 1 - 1e-7)  # Pairwise probabilities (batch_size, batch_size)
+        
+        # Binary cross-entropy loss
+        bce_loss = mask * torch.log(P_ij + 1e-7) + (1 - mask) * torch.log(1 - P_ij + 1e-7)
+        
+        # We only sum over valid pairs (where the mask is 1)
+        loss = -torch.sum(bce_loss * mask) / ( torch.sum(mask) + 1e-7 )  # Normalize by the number of valid pairs
+
+        if self.model != None and self.l2_lambda > 0:
+
+            l2_reg = 0.0
+            for param in self.model.parameters():
+                l2_reg += torch.norm(param, 2)
+
+            loss = loss + self.l2_lambda * l2_reg
+
+        return loss
+
 
 
 batch_size = 4
@@ -200,8 +252,8 @@ learning_rate = 0.0001
 
 dim = 128
 
-conv_n = 5
-conv_filters = np.linspace(dim // 2, dim, num=5 ).astype(int)
+conv_n = 7
+conv_filters = np.linspace(dim // 2, dim, num=conv_n).astype(int)
 
 linear_dim = 100
 seq_len = 200000
@@ -209,18 +261,105 @@ seq_len = 200000
 
 model = Enformer(seq_len,conv_filters, dim, linear_dim)
 
-"""
-train_dataset = HDF5Dataset(X_train, y_train)
-val_dataset = HDF5Dataset(X_val, y_val)
+base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/my_dna_data/'
+
+train_path = base_dir + 'data1.h5'
+val_path = base_dir + 'data1_val.h5'
+
+train_dataset = HDF5Dataset(train_path)
+val_dataset = HDF5Dataset(val_path)
 
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)"""
+val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
+
+def train_val (train_loader, val_loader, model):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    model.to(device)
+    
+    #criterion = nn.MSELoss(reduction='mean')
+    criterion = RankNet1DLoss(model=model, l2_lambda=0.00)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+
+    best_spearman = 0
+
+    for epoch in range(num_epochs):
+        print("epoch : "+str(epoch))
+
+        print("training...")
+        model.train()
+
+        train_loss = 0
+        train_prediction = torch.Tensor([]).to(device)
+        train_y = torch.Tensor([]).to(device)
+
+        for X_batch, y_batch in tqdm(train_loader):
+
+            """if torch.isnan(X_batch).any():
+                continue"""
+
+            X_batch,y_batch = X_batch.to(device), y_batch.to(device)
+
+            f_X = model(X_batch)
+
+            train_prediction = torch.cat((train_prediction,f_X))
+            train_y = torch.cat((train_y,y_batch))
+
+            optimizer.zero_grad()
+
+            #loss = criterion(f_X, target=y_batch)
+            loss = criterion(f_X, y_batch)
+
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+
+        spearman = spearmanr(train_prediction.detach().cpu(),train_y.detach().cpu())
+        print("train Spearman : ",spearman)
+        print("Mean training loss: ",train_loss /len(train_dataset))
+
+        time.sleep(2)
+
+        print("validation...")
+        model.eval()
+
+        val_loss = 0
+        val_prediction = torch.Tensor([]).to(device)
+        val_y = torch.Tensor([]).to(device)
+
+        with torch.no_grad():
+            for X_batch, y_batch in tqdm(val_loader):
+
+                if torch.isnan(X_batch).any():
+                    continue
+
+                X_batch,y_batch = X_batch.to(device), y_batch.to(device)
+
+                f_X = model(X_batch)
+
+                val_prediction = torch.cat((val_prediction,f_X))
+                val_y = torch.cat((val_y,y_batch))
+
+                loss = criterion(f_X, y_batch)
+
+                val_loss += loss.item()
+            
+            spearman = spearmanr(val_prediction.detach().cpu(),val_y.detach().cpu()).correlation
+            print("validation Spearman : ",spearman)
+            print("Mean validation loss: ",val_loss /len(val_dataset))
+
+            if spearman > best_spearman and spearman > 0.74:
+                best_spearman = spearman
+                print("best spearman for now : ",spearman)
+                torch.save(model.state_dict(),'/home/vegeta/Downloads/ML4G_Project_1_Data/my_checkpoints/actually_validated_weights.pth')
+
+        time.sleep(2)
+
+train_val(train_loader, val_loader, model)
 
 
-test = torch.rand(5,4,200000)
 
-
-print(model(test).shape)
 
 
 
