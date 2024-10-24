@@ -8,15 +8,9 @@ from scipy.stats import spearmanr
 import h5py
 from tqdm import tqdm
 import torch.optim as optim
-
+import time
 
 torch.set_printoptions(sci_mode=False)
-
-embed_dim = 128  
-num_heads = 8    
-seq_length = 10  
-batch_size = 4  
-dropout_prob = 0.5
 
 
 # 128-bp resolution recommended
@@ -36,16 +30,16 @@ class AttentionPool(nn.Module):
     def forward(self, x):
         b, d, n = x.shape  # Assume x is of shape (batch_size, dim, seq_len)
 
-        """remainder = n % self.pool_size
+        remainder = n % self.pool_size
         needs_padding = remainder > 0
 
         # Padding if the sequence length is not divisible by pool_size
         if needs_padding:
             x = F.pad(x, (0, remainder), value=0)
-        """
+        
 
         # Reshape for pooling
-        x = x.view(b, d, n // self.pool_size, self.pool_size)
+        x = x.view(b, d, n // self.pool_size + remainder, self.pool_size)
         
         # Apply attention logits using 2D conv
         logits = self.to_attn_logits(x)  # Apply 1x1 convolution to get attention logits
@@ -78,7 +72,7 @@ class PositionalEncoding(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, embed_dim, num_heads=8, dropout_prob=0.2):
+    def __init__(self, embed_dim, num_heads=4, dropout_prob=0.5):
         super(Transformer, self).__init__()
         self.pos_encoding = PositionalEncoding(embed_dim)
         self.layer_norm = nn.LayerNorm(embed_dim)
@@ -156,7 +150,7 @@ class Enformer(nn.Module):
 
         self.transformer = Transformer(dim)
 
-        self.linear1 = nn.Linear(dim * (initial_seq_len // pow(2,len(conv_filters))) , linear)
+        self.linear1 = nn.Linear(dim * math.ceil(initial_seq_len / pow(2,len(conv_filters))) , linear)
         self.linear2 = nn.Linear(linear,1)
 
     def forward(self, x ):
@@ -184,7 +178,7 @@ class HDF5Dataset(Dataset):
         self.y = self.h5_file['gex_data']
 
     def __len__(self):
-        return len(self.y)
+        return min(8000,len(self.y))
     
     def __getitem__(self, idx):
         X = self.X[idx]
@@ -246,13 +240,13 @@ class RankNet1DLoss(nn.Module):
 
 
 
-batch_size = 4
+batch_size = 8
 num_epochs = 5
 learning_rate = 0.0001
 
 dim = 128
 
-conv_n = 7
+conv_n = 8
 conv_filters = np.linspace(dim // 2, dim, num=conv_n).astype(int)
 
 linear_dim = 100
@@ -278,7 +272,7 @@ def train_val (train_loader, val_loader, model):
     model.to(device)
     
     #criterion = nn.MSELoss(reduction='mean')
-    criterion = RankNet1DLoss(model=model, l2_lambda=0.00)
+    criterion = RankNet1DLoss(model=model, l2_lambda=0.05)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     best_spearman = 0
@@ -356,7 +350,9 @@ def train_val (train_loader, val_loader, model):
 
         time.sleep(2)
 
-train_val(train_loader, val_loader, model)
+
+def main():
+    train_val(train_loader, val_loader, model)
 
 
 

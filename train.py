@@ -11,15 +11,8 @@ import time
 
 from scipy.stats import spearmanr
 
-"""def Spearman(v1, v2):
-    rank1 = torch.argsort(torch.argsort(v1))
-    rank2 = torch.argsort(torch.argsort(v2))
-
-    d = rank1 - rank2
-    d_norm = torch.sum(d.float() ** 2)
-
-    n = len(rank1)
-    return 1 - (6 * d_norm) / (n * (n**2 - 1))"""
+from expecto import ConvNetModel
+from enformer import Enformer
 
 
 class RankNet1DLoss(nn.Module):
@@ -65,29 +58,6 @@ class RankNet1DLoss(nn.Module):
         return loss
 
 
-
-class ConvNetModel(nn.Module):
-    def __init__(self,width, nhistones, nfilters, filtsize, padding, poolsize, n_states_linear1, n_states_linear2, noutputs):
-        super(ConvNetModel, self).__init__()
-        self.conv1 = nn.Conv1d(nhistones, nfilters, filtsize, padding=padding)
-        self.pool = nn.MaxPool1d(poolsize)
-        self.fc1 = nn.Linear(int( width * nfilters // poolsize ), n_states_linear1)
-        self.fc2 = nn.Linear(n_states_linear1, n_states_linear2)
-        self.fc3 = nn.Linear(n_states_linear2, noutputs)
-        self.dropout = nn.Dropout(0.8) #0.5
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = F.relu(x)
-        x = self.pool(x)
-        x = x.view(x.size(0), -1)  # Flatten
-        x = self.dropout(x)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x.squeeze(-1)
-
-
 class SimpleDataset(Dataset):
     def __init__(self, X, y):
         
@@ -102,43 +72,35 @@ class SimpleDataset(Dataset):
         label = self.y[idx]
         return sample, label
 
-X_train_path = '/home/vegeta/Downloads/ML4G_Project_1_Data/my_histone_data/X1_train.npy'
-y_train_path = '/home/vegeta/Downloads/ML4G_Project_1_Data/my_histone_data/y1_train.npy'
 
-X_train = torch.from_numpy(np.load(X_train_path)).float()
-y_train = torch.from_numpy(np.load(y_train_path)).float()
+class HDF5Dataset(Dataset):
+    def __init__(self, h5_file_path, transform=None):
+        
+        self.h5_file_path = h5_file_path
+        self.transform = transform
+        
+        self.h5_file = h5py.File(h5_file_path, 'r')
 
+        self.X = self.h5_file['dna_data']
+        self.y = self.h5_file['gex_data']
 
-X_val_path = '/home/vegeta/Downloads/ML4G_Project_1_Data/my_histone_data/X2_val.npy'
-y_val_path = '/home/vegeta/Downloads/ML4G_Project_1_Data/my_histone_data/y2_val.npy'
-
-X_val = torch.from_numpy(np.load(X_val_path)).float()
-y_val = torch.from_numpy(np.load(y_val_path)).float()
-
-
-width = X_train.shape[-1]
-nhistones = 5
-nfilters = 50 #200 
-filtsize = 10 #20
-poolsize = 5
-padding = filtsize // 2
-n_states_linear1 = 100  #100  625 #2000
-n_states_linear2 = 20  #20  125  #1000
-noutputs = 1
-
-model = ConvNetModel(width,nhistones, nfilters, filtsize, padding, poolsize, n_states_linear1, n_states_linear2, noutputs)
-#model.load_state_dict(torch.load(weights_path))
-
-batch_size = 16
-num_epochs = 20
-learning_rate = 0.001
-
-
-train_dataset = SimpleDataset(X_train, y_train)
-val_dataset = SimpleDataset(X_val, y_val)
-
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
+    def __len__(self):
+        return min(8000,len(self.y))
+    
+    def __getitem__(self, idx):
+        X = self.X[idx]
+        y = self.y[idx]
+        
+        X = torch.tensor(X, dtype=torch.float32)
+        y = torch.tensor(y, dtype=torch.float32)
+        
+        if self.transform:
+            data = self.transform(data)
+        
+        return X,y
+    
+    def close(self):
+        self.h5_file.close()
 
 
 def train_val (train_loader, val_loader, model):
@@ -224,9 +186,3 @@ def train_val (train_loader, val_loader, model):
                 torch.save(model.state_dict(),'/home/vegeta/Downloads/ML4G_Project_1_Data/my_checkpoints/actually_validated_weights.pth')
 
         time.sleep(2)
-
-
-
-train_val(train_loader, val_loader, model)
-    
-
