@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+import numpy as np
+from torch.utils.data import Dataset, DataLoader
+
 
 torch.set_printoptions(sci_mode=False)
 
@@ -53,7 +56,7 @@ class AttentionPool(nn.Module):
 
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, max_len: int = 5000):
+    def __init__(self, d_model: int, max_len: int = 200000):
         super(PositionalEncoding, self).__init__()
         self.encoding = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)  # [0,1,2,3,4,5,6, ...]
@@ -63,7 +66,7 @@ class PositionalEncoding(nn.Module):
         self.encoding = self.encoding.unsqueeze(0)  # Add batch dimension
 
     def forward(self, x: torch.Tensor):
-        return x + self.encoding[:, :x.size(1)]   # only the first x.size(1) positions are actually used
+        return x + self.encoding[:,:x.size(1),:]   # only the first x.size(2) positions are actually used
         # broadcasting is used
 
 
@@ -71,7 +74,7 @@ class PositionalEncoding(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, embed_dim, num_heads, dropout_prob):
+    def __init__(self, embed_dim, num_heads=8, dropout_prob=0.2):
         super(Transformer, self).__init__()
         self.pos_encoding = PositionalEncoding(embed_dim)
         self.layer_norm = nn.LayerNorm(embed_dim)
@@ -127,7 +130,7 @@ class ConvLayer(nn.Module):
     def __init__(self, dim_in, dim_out):
         super(ConvLayer,self).__init__()
         self.conv_block1 = ConvBlock(dim_in, dim_out, kernel_size=5)
-        self.conv_block2 = ConvBlock(dim_in, dim_out, kernel_size=1)
+        self.conv_block2 = ConvBlock(dim_out, dim_out, kernel_size=1)
         self.pool = AttentionPool(dim_out)
 
     def forward(self,x):
@@ -139,7 +142,7 @@ class ConvLayer(nn.Module):
 
 
 class Enformer(nn.Module):
-    def __init__(self, conv_filters, dim, linear):
+    def __init__(self, initial_seq_len, conv_filters, dim, linear):
         super(Enformer, self).__init__()
         self.stem = Stem(dim // 2)
         conv_tower = []
@@ -149,28 +152,20 @@ class Enformer(nn.Module):
 
         self.transformer = Transformer(dim)
 
-        self.linear1 = nn.Linear(dim, linear)
+        self.linear1 = nn.Linear(dim * (initial_seq_len / pow(2,len(conv_filters))) , linear)
         self.linear2 = nn.Linear(linear,1)
 
     def forward(self, x ):
         x = self.stem(x)
         x = self.conv_tower(x)
+        x = x.transpose(1,2)
         x = self.transformer(x)
+        x = x.reshape(x.size(0),x.size(1)*x.size(2))
         x = F.gelu( self.linear1(x) )
         x = self.linear2(x)
         return x
 
 
-
-dim = 128
-
-conv_n = 5
-conv_filters = np.linspace(dim // 2, dim, num=5 ).astype(int)
-
-linear_dim = 100
-
-
-model = Enformer(conv_filters, dim, linear_dim)
 
 class HDF5Dataset(Dataset):
     def __init__(self, h5_file_path, transform=None):
@@ -203,18 +198,29 @@ batch_size = 4
 num_epochs = 5
 learning_rate = 0.0001
 
+dim = 128
+
+conv_n = 5
+conv_filters = np.linspace(dim // 2, dim, num=5 ).astype(int)
+
+linear_dim = 100
+seq_len = 200000
 
 
+model = Enformer(seq_len,conv_filters, dim, linear_dim)
 
+"""
 train_dataset = HDF5Dataset(X_train, y_train)
 val_dataset = HDF5Dataset(X_val, y_val)
 
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)"""
 
 
+test = torch.rand(5,4,200000)
 
 
+print(model(test).shape)
 
 
 
