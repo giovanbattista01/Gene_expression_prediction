@@ -103,16 +103,22 @@ class HDF5Dataset(Dataset):
         self.h5_file.close()
 
 
-def train_val (train_loader, val_loader, model):
+def train_val (train_loader, val_loader, model, num_training_samples, num_val_samples):
+
+    learning_rate = 0.0001
+
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     model.to(device)
     
-    #criterion = nn.MSELoss(reduction='mean')
     criterion = RankNet1DLoss(model=model, l2_lambda=0.05)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     best_spearman = 0
+
+    goal = 0.8
+    save_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/my_checkpoints/best_weights.pth'
 
     for epoch in range(num_epochs):
         print("epoch : "+str(epoch))
@@ -124,10 +130,7 @@ def train_val (train_loader, val_loader, model):
         train_prediction = torch.Tensor([]).to(device)
         train_y = torch.Tensor([]).to(device)
 
-        for X_batch, y_batch in train_loader:
-
-            if torch.isnan(X_batch).any():
-                continue
+        for X_batch, y_batch in tqdm(train_loader):
 
             X_batch,y_batch = X_batch.to(device), y_batch.to(device)
 
@@ -138,7 +141,6 @@ def train_val (train_loader, val_loader, model):
 
             optimizer.zero_grad()
 
-            #loss = criterion(f_X, target=y_batch)
             loss = criterion(f_X, y_batch)
 
             loss.backward()
@@ -148,7 +150,7 @@ def train_val (train_loader, val_loader, model):
 
         spearman = spearmanr(train_prediction.detach().cpu(),train_y.detach().cpu())
         print("train Spearman : ",spearman)
-        print("Mean training loss: ",train_loss /len(train_dataset))
+        print("Mean training loss: ",train_loss /num_training_samples)
 
         time.sleep(2)
 
@@ -160,10 +162,7 @@ def train_val (train_loader, val_loader, model):
         val_y = torch.Tensor([]).to(device)
 
         with torch.no_grad():
-            for X_batch, y_batch in val_loader:
-
-                if torch.isnan(X_batch).any():
-                    continue
+            for X_batch, y_batch in tqdm(val_loader):
 
                 X_batch,y_batch = X_batch.to(device), y_batch.to(device)
 
@@ -178,11 +177,16 @@ def train_val (train_loader, val_loader, model):
             
             spearman = spearmanr(val_prediction.detach().cpu(),val_y.detach().cpu()).correlation
             print("validation Spearman : ",spearman)
-            print("Mean validation loss: ",val_loss /len(val_dataset))
+            print("Mean validation loss: ",val_loss /num_val_samples)
 
-            if spearman > best_spearman and spearman > 0.74:
+            if spearman > best_spearman and spearman > goal:
                 best_spearman = spearman
                 print("best spearman for now : ",spearman)
-                torch.save(model.state_dict(),'/home/vegeta/Downloads/ML4G_Project_1_Data/my_checkpoints/actually_validated_weights.pth')
+                torch.save(model.state_dict(),save_dir)
 
         time.sleep(2)
+
+
+
+def main():
+    pass
