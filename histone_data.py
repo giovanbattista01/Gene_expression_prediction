@@ -13,8 +13,6 @@ import torch.nn.functional as F
 import pyBigWig
 
 
-###   RETRIEVING INFO ON THE GENE EXPRESSION DATASET ###
-
 def load_gene_info(mode,chrom_set):   # mode can be train,val or test, chrom_set can be 1,2,3
 
     base_path = "/home/vegeta/Downloads/ML4G_Project_1_Data/CAGE-train/CAGE-train/"
@@ -35,24 +33,7 @@ def load_gene_info(mode,chrom_set):   # mode can be train,val or test, chrom_set
     return gene_names, chrs, tss_centers, strands, gex
 
 
-gene_names, chroms, tss_centers, strands, gex = load_gene_info('test',3)
-
-
-### RETRIEVING HISTONE DATA ###
-
-
-
-histones_used = ['H3K4me3','H3K4me1','H3K36me3','H3K9me3','H3K27me3']
-
-base_path = '/home/vegeta/Downloads/ML4G_Project_1_Data'
-
-halfspan = 100000 #kb
-final_size = 2000
-
-X = np.zeros((len(gene_names), len(histones_used), final_size  ))
-
-
-def retrieve_histones_data(bw_file, histone_index):
+def retrieve_histones_data(bw_file, X,  histone_index):
 
     halfspan  = 100000
 
@@ -79,29 +60,46 @@ def retrieve_histones_data(bw_file, histone_index):
         X[gene_index,histone_index] = downsampled
 
 
-chrom_set = 2
 
-for histone_index, histone in enumerate(histones_used):
+def main():
 
-    bigwig_file_path = os.path.join(base_path,histone+'-bigwig','X'+str(chrom_set)+'.bigwig')
+    ###   RETRIEVING INFO ON THE GENE EXPRESSION DATASET ###
 
-    if Path(bigwig_file_path).exists():
+    gene_names, chroms, tss_centers, strands, gex = load_gene_info('test',3)
 
-        bw = pyBigWig.open(bigwig_file_path)
+    ### RETRIEVING HISTONE DATA ###
 
-    else:
+    histones_used = ['H3K4me3','H3K4me1','H3K36me3','H3K9me3','H3K27me3']
 
-        bigwig_file_path = os.path.join(base_path,histone+'-bigwig','X'+str(chrom_set)+'.bw')
-        bw = pyBigWig.open(bigwig_file_path)
+    base_path = '/home/vegeta/Downloads/ML4G_Project_1_Data'
 
-    retrieve_histones_data(bw, histone_index)
+    halfspan = 100000 #kb
+    final_size = 2000
 
-    bw.close()
+    X = np.zeros((len(gene_names), len(histones_used), final_size  ))
 
+    chrom_set = 2
 
-np.save('/home/vegeta/Downloads/ML4G_Project_1_Data/my_solution/X2_val.npy', X)
+    for histone_index, histone in enumerate(histones_used):
 
-np.save('/home/vegeta/Downloads/ML4G_Project_1_Data/my_solution/y2_val.npy',gex.to_numpy())
+        bigwig_file_path = os.path.join(base_path,histone+'-bigwig','X'+str(chrom_set)+'.bigwig')
+
+        if Path(bigwig_file_path).exists():
+
+            bw = pyBigWig.open(bigwig_file_path)
+
+        else:
+
+            bigwig_file_path = os.path.join(base_path,histone+'-bigwig','X'+str(chrom_set)+'.bw')
+            bw = pyBigWig.open(bigwig_file_path)
+
+        retrieve_histones_data(bw, X, histone_index)
+
+        bw.close()
+
+    np.save('/home/vegeta/Downloads/ML4G_Project_1_Data/my_solution/X2_val.npy', X)
+
+    np.save('/home/vegeta/Downloads/ML4G_Project_1_Data/my_solution/y2_val.npy',gex.to_numpy())
 
 
 

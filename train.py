@@ -255,7 +255,7 @@ def enformerSetup():
 
 
 def main():
-    chosen_model = 'enformer'
+    chosen_model = 'expecto'
 
     if chosen_model == 'expecto':
         train_loader, val_loader, model, num_training_samples, num_val_samples = expectoSetup()
