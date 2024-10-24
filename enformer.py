@@ -160,33 +160,6 @@ class Enformer(nn.Module):
         return x.squeeze()
 
 
-def enformerSetup():
-
-    batch_size = 8
-    num_epochs = 5
-    learning_rate = 0.0001
-
-    dim = 128
-
-    conv_n = 8
-    conv_filters = np.linspace(dim // 2, dim, num=conv_n).astype(int)
-
-    linear_dim = 100
-    seq_len = 200000
-
-
-    model = Enformer(seq_len,conv_filters, dim, linear_dim)
-
-    base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/my_dna_data/'
-
-    train_path = base_dir + 'data1.h5'
-    val_path = base_dir + 'data1_val.h5'
-
-    train_dataset = HDF5Dataset(train_path)
-    val_dataset = HDF5Dataset(val_path)
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
 
 def main():
     pass
