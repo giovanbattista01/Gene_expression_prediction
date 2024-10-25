@@ -15,6 +15,27 @@ from expecto import ConvNetModel
 from enformer import Enformer
 
 
+class BCE_L2(nn.Module):
+    def __init__(self, model = None, l2_lambda=0):
+        super(BCE_L2, self).__init__()
+        self.l2_lambda = l2_lambda
+        self.model = model
+
+    def forward(self, y_pred, y_true):
+
+        criterion = nn.BCEWithLogitsLoss()
+        loss = criterion(y_pred, y_true)
+        if self.model != None and self.l2_lambda > 0:
+
+            l2_reg = 0.0
+            for param in self.model.parameters():
+                l2_reg += torch.norm(param, 2)
+
+            loss = loss + self.l2_lambda * l2_reg
+
+        return loss
+
+
 class RankNet1DLoss(nn.Module):
     def __init__(self, model = None, l2_lambda=0):
         super(RankNet1DLoss, self).__init__()
@@ -113,6 +134,7 @@ def train_val (train_loader, val_loader, model, num_training_samples, num_val_sa
     model.to(device)
     
     criterion = RankNet1DLoss(model=model, l2_lambda=0.05)
+    #criterion = BCE_L2(model=model, l2_lambda=0.1)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     best_spearman = 0
@@ -131,6 +153,9 @@ def train_val (train_loader, val_loader, model, num_training_samples, num_val_sa
         train_y = torch.Tensor([]).to(device)
 
         for X_batch, y_batch in tqdm(train_loader):
+
+            if torch.isnan(X_batch).any():
+                continue
 
             X_batch,y_batch = X_batch.to(device), y_batch.to(device)
 
@@ -164,6 +189,9 @@ def train_val (train_loader, val_loader, model, num_training_samples, num_val_sa
         with torch.no_grad():
             for X_batch, y_batch in tqdm(val_loader):
 
+                if torch.isnan(X_batch).any():
+                    continue
+
                 X_batch,y_batch = X_batch.to(device), y_batch.to(device)
 
                 f_X = model(X_batch)
@@ -179,6 +207,8 @@ def train_val (train_loader, val_loader, model, num_training_samples, num_val_sa
             print("validation Spearman : ",spearman)
             print("Mean validation loss: ",val_loss /num_val_samples)
 
+            print(val_prediction[:10])
+
             if spearman > best_spearman and spearman > goal:
                 best_spearman = spearman
                 print("best spearman for now : ",spearman)
@@ -187,12 +217,13 @@ def train_val (train_loader, val_loader, model, num_training_samples, num_val_sa
         time.sleep(2)
 
 def expectoSetup():
+    
+    base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/my_histone_data/old_data/'
+    X_train_path = base_dir + 'X1_train.npy'
+    y_train_path = base_dir + 'y1_train.npy'
 
-    X_train_path = '/home/vegeta/Downloads/ML4G_Project_1_Data/my_histone_data/X1_train.npy'
-    y_train_path = '/home/vegeta/Downloads/ML4G_Project_1_Data/my_histone_data/y1_train.npy'
-
-    X_val_path = '/home/vegeta/Downloads/ML4G_Project_1_Data/my_histone_data/X2_val.npy'
-    y_val_path = '/home/vegeta/Downloads/ML4G_Project_1_Data/my_histone_data/y2_val.npy'
+    X_val_path = base_dir + 'X2_val.npy'
+    y_val_path = base_dir + 'y2_val.npy'
 
     X_train = torch.from_numpy(np.load(X_train_path)).float()
     y_train = torch.from_numpy(np.load(y_train_path)).float()
@@ -212,7 +243,10 @@ def expectoSetup():
 
     batch_size = 16
 
+    #y_train = (y_train > 0).float()
     train_dataset = SimpleDataset(X_train,y_train)
+
+    #y_val = (y_val > 0).float()
     val_dataset = SimpleDataset(X_val,y_val)
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)

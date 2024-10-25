@@ -8,7 +8,7 @@ import time
 
 
 def main():
-    gene_names, chrs, tss_centers, strands, gex = load_gene_info('val',2)
+    gene_names, chrs, tss_centers, strands, gex = load_gene_info('val',1)
     # max gex gene index -> 6269
     # min gex gene index -> 0
 
@@ -64,13 +64,13 @@ def main():
     for i in range(len(active)):
         try:
             u,a = unactive[i], active[i]
-            unactive_data = dnase.values(chrs[u],tss_centers[u]-1000,tss_centers[u]+1000)
-            active_data = dnase.values(chrs[a],tss_centers[a]-1000,tss_centers[a]+1000)
+            unactive_data = dnase.values(chrs[u],tss_centers[u]-50,tss_centers[u]+50)
+            active_data = dnase.values(chrs[a],tss_centers[a]-50,tss_centers[a]+50)
 
-            if max(unactive_data) > 1:
+            if max(unactive_data) > 0.5:
                 unactive_count += 1
 
-            if max(active_data) > 1:
+            if max(active_data) > 0.5:
                 active_count += 1
 
             count +=1
@@ -79,6 +79,21 @@ def main():
             continue
 
     print(active_count/count *100, unactive_count/count *100)
+
+
+    simple_preds = np.zeros(len(data))
+    for i in range(len(data)):
+        try:
+            vals = dnase.values(chrs[i],tss_centers[i]-50,tss_centers[i]+50)
+
+            if max(vals) > 0.5:
+                simple_preds[i] = 1
+
+        except:
+            continue
+
+    print(spearmanr(simple_preds, data), spearmanr(simple_preds,gex), spearmanr(data,gex))
+
                 
 
 
