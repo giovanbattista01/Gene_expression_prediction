@@ -36,7 +36,9 @@ def main():
     active = np.argwhere(data==1)
     active = active.reshape(active.shape[0])
 
-    x = range(200000)
+    halfspan  = 50
+
+    x = range(2 * halfspan)
 
     """for i in range(len(active)):
         try:
@@ -125,19 +127,19 @@ def main():
     for i in range(len(active)):
         try:
             a = active[i]
-            active_dnase = dnase.values(chrs[a],tss_centers[a]-100000,tss_centers[a]+100000)
+            active_dnase = dnase.values(chrs[a],tss_centers[a]-halfspan,tss_centers[a]+halfspan)
             m,v = np.array(active_dnase).mean(), np.array(active_dnase).std()
             plt.plot(x, active_dnase, color='red', label='Expressed DNAse') 
 
             histone_data = []
             for j in range(len(histones_used)):
-                histone_data = histones[j].values(chrs[a],tss_centers[a]-100000,tss_centers[a]+100000)
+                histone_data = histones[j].values(chrs[a],tss_centers[a]-halfspan,tss_centers[a]+halfspan)
                 histone_data = np.array(histone_data)
                 hm, hv = histone_data.mean(),histone_data.std()
 
                 histone_data = (histone_data - hm) / hv * v + m
 
-                if j > 1:
+                if j > 9:
                     continue
                 
                 plt.plot(x, histone_data, color=colors[j], label=histones_used[j]) 
