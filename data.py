@@ -37,9 +37,9 @@ def load_gene_info(mode,cell_line):   # mode can be train,val or test, cell_line
 
 def create_tss_dataset(histones_list, base_dir='/home/vegeta/Downloads/ML4G_Project_1_Data', mode='train', cell_line=1, halfspan=10000):   # creates dataset based on just tss centers positions
     gene_names, chroms, tss_centers, strands, gex = load_gene_info(mode,cell_line)
-    X = np.zeros((len(gene_names), len(histones_list) + 1 , halfspan  ))  # number of histone marks + 1 for dnase
+    X = np.zeros((len(gene_names), len(histones_list) + 1 , halfspan *2 ))  # number of histone marks + 1 for dnase
 
-    retrieve_all_histones(base_dir, histones_list, X, gene_names, chroms, tss_centers, strands, gex)
+    retrieve_all_histones(base_dir, histones_list, cell_line, X, gene_names, chroms, tss_centers, strands, gex)
 
     dnase_path = os.path.join(base_dir,'DNase-bigwig','X'+str(cell_line)+'.bw')
     dnase_file = pyBigWig.open(dnase_path)
@@ -51,7 +51,21 @@ def create_tss_dataset(histones_list, base_dir='/home/vegeta/Downloads/ML4G_Proj
 
 
 def main():
-    pass
+
+    base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/'
+    save_dir = base_dir + 'tss_data/'
+
+    modes = ['train','val']
+    cell_lines = [1,2]
+
+    histones_list = ['H3K4me3','H3K4me1','H3K36me3','H3K9me3','H3K27me3']
+
+    for mode in modes:
+        for cell_line in cell_lines:
+            X,y = create_tss_dataset(histones_list,mode=mode,cell_line=cell_line)
+            np.save(save_dir + 'X' + str(cell_line) + '_' + mode, X)
+            np.save(save_dir + 'y' + str(cell_line) + '_' + mode, y)
+
 
 
 
