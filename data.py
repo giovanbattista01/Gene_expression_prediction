@@ -34,9 +34,6 @@ def load_gene_info(mode,cell_line):   # mode can be train,val or test, cell_line
 
     return gene_names, chrs, tss_centers, strands, gex
 
-def get_dnase():
-
-
 
 def create_tss_dataset(histones_list, base_dir='/home/vegeta/Downloads/ML4G_Project_1_Data', mode='train', cell_line=1, halfspan=10000):   # creates dataset based on just tss centers positions
     gene_names, chroms, tss_centers, strands, gex = load_gene_info(mode,cell_line)
@@ -48,7 +45,9 @@ def create_tss_dataset(histones_list, base_dir='/home/vegeta/Downloads/ML4G_Proj
     dnase_file = pyBigWig.open(dnase_path)
     retrieve_histone_data(dnase_file, X,  len(histones_list), gene_names, chroms, tss_centers, strands, gex)
 
-    
+    gex = np.array(gex)
+    gex[np.isnan(gex)] = 0
+    return X,gex
 
 
 def main():
