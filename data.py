@@ -35,9 +35,11 @@ def load_gene_info(mode,cell_line):   # mode can be train,val or test, cell_line
     return gene_names, chrs, tss_centers, strands, gex
 
 
-def create_tss_dataset(histones_list, base_dir='/home/vegeta/Downloads/ML4G_Project_1_Data', mode='train', cell_line=1, halfspan=10000):   # creates dataset based on just tss centers positions
+def generate_tss_x_y(histones_list, base_dir='/home/vegeta/Downloads/ML4G_Project_1_Data', mode='train', cell_line=1, halfspan=10000):   # creates dataset based on just tss centers positions
     gene_names, chroms, tss_centers, strands, gex = load_gene_info(mode,cell_line)
-    X = np.zeros((len(gene_names), len(histones_list) + 1 , halfspan *2 ))  # number of histone marks + 1 for dnase
+    #X = np.zeros((len(gene_names), len(histones_list) + 1 , halfspan *2 ))  # number of histone marks + 1 for dnase
+    X = np.memmap('X_data.memmap', dtype='float32', mode='w+', shape=(len(gene_names), len(histones_list) + 1, halfspan *2))
+
 
     retrieve_all_histones(base_dir, histones_list, cell_line, X, gene_names, chroms, tss_centers, strands, gex)
 
@@ -49,9 +51,7 @@ def create_tss_dataset(histones_list, base_dir='/home/vegeta/Downloads/ML4G_Proj
     gex[np.isnan(gex)] = 0
     return X,gex
 
-
-def main():
-
+def create_tss_data():
     base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/'
     save_dir = base_dir + 'tss_data/'
 
@@ -62,9 +62,30 @@ def main():
 
     for mode in modes:
         for cell_line in cell_lines:
-            X,y = create_tss_dataset(histones_list,mode=mode,cell_line=cell_line)
+            X,y = generate_tss_x_y(histones_list,mode=mode,cell_line=cell_line)
             np.save(save_dir + 'X' + str(cell_line) + '_' + mode, X)
             np.save(save_dir + 'y' + str(cell_line) + '_' + mode, y)
+
+
+def generate_gene_x_y():
+    gene_names, chroms, tss_centers, strands, gex = load_gene_info(mode,cell_line)
+    X = np.memmap('X_data.memmap', dtype='float32', mode='w+', shape=(len(gene_names), len(histones_list) + 1, chosen_dim))
+
+    retrieve_all_histones(base_dir, histones_list, cell_line, X, gene_names, chroms, tss_centers, strands, gex, downsample_dim=5000)
+
+    dnase_path = os.path.join(base_dir,'DNase-bigwig','X'+str(cell_line)+'.bw')
+    dnase_file = pyBigWig.open(dnase_path)
+    retrieve_histone_data(dnase_file, X,  len(histones_list), gene_names, chroms, tss_centers, strands, gex)
+
+    gex = np.array(gex)
+    gex[np.isnan(gex)] = 0
+    return X,gex
+
+
+
+
+def main():
+
 
 
 
