@@ -5,10 +5,13 @@ import matplotlib.pyplot as plt
 from histone_data import load_gene_info
 from scipy.stats import spearmanr
 import time
+import os
+from pathlib import Path
+
 
 
 def main():
-    gene_names, chrs, tss_centers, strands, gex = load_gene_info('val',1)
+    gene_names, chrs, tss_centers, strands, gex = load_gene_info('train',1)
     # max gex gene index -> 6269
     # min gex gene index -> 0
 
@@ -56,7 +59,7 @@ def main():
         except:
             continue"""
 
-    unactive_count = 0
+    """unactive_count = 0
     active_count = 0
 
     count = 0
@@ -92,9 +95,66 @@ def main():
         except:
             continue
 
-    print(spearmanr(simple_preds, data), spearmanr(simple_preds,gex), spearmanr(data,gex))
+    print(spearmanr(simple_preds, data), spearmanr(simple_preds,gex), spearmanr(data,gex))"""
 
+    histones_used = ['H3K4me3','H3K4me1','H3K36me3','H3K9me3','H3K27me3']
+    colors = ['green','orange','purple','black','blue']
+
+    base_path =  '/home/vegeta/Downloads/ML4G_Project_1_Data/'
+
+    histones = []
+
+    chrom_set = 1
+
+    for i in range(len(histones_used)):
+
+        bigwig_file_path = os.path.join(base_path,histones_used[i]+'-bigwig','X'+str(chrom_set)+'.bigwig')
+
+        if Path(bigwig_file_path).exists():
+
+            bw = pyBigWig.open(bigwig_file_path)
+
+        else:
+
+            bigwig_file_path = os.path.join(base_path,histones_used[i]+'-bigwig','X'+str(chrom_set)+'.bw')
+            bw = pyBigWig.open(bigwig_file_path)
+
+        histones.append(bw)
+
+
+    for i in range(len(active)):
+        try:
+            a = active[i]
+            active_dnase = dnase.values(chrs[a],tss_centers[a]-100000,tss_centers[a]+100000)
+            m,v = np.array(active_dnase).mean(), np.array(active_dnase).std()
+            plt.plot(x, active_dnase, color='red', label='Expressed DNAse') 
+
+            histone_data = []
+            for j in range(len(histones_used)):
+                histone_data = histones[j].values(chrs[a],tss_centers[a]-100000,tss_centers[a]+100000)
+                histone_data = np.array(histone_data)
+                hm, hv = histone_data.mean(),histone_data.std()
+
+                histone_data = (histone_data - hm) / hv * v + m
+
+                if j > 1:
+                    continue
                 
+                plt.plot(x, histone_data, color=colors[j], label=histones_used[j]) 
+
+            plt.legend()
+            
+            # Display the plot for 5 seconds
+            plt.show()
+            
+            # Close the plot to proceed to the next one
+            plt.close()
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
+
+
+    
 
 
 
