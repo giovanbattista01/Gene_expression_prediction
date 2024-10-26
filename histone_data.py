@@ -39,7 +39,30 @@ def retrieve_histone_data(bw_file, X,  histone_index, gene_names, chroms, tss_ce
             X[gene_index, histone_index] = seq
 
 
-def retrieve_all_histones(base_dir, histones_list, cell_line, X, gene_names, chroms, tss_centers, strands, gex, halfspan=10000, downsample=-1):
+def retrieve_histone_data_around_gene(bw_file, X,  histone_index, gene_names, chroms, gene_coords, strands, gex, halfspan ,downsample_size):
+    for gene_index in tqdm(range(len(gene_names))):
+
+        try:
+            seq = np.array(bw_file.values(chroms[gene_index], gene_coords[gene_index][0] - halfspan, gene_coords[gene_index][1]+halfspan), dtype=np.float32)
+
+        except:
+
+            if gene_coords[gene_index][0] - halfspan < 0:
+                seq = bw_file.values(chroms[gene_index], 0, gene_coords[gene_index][1] + halfspan)
+
+            else :
+                chrom_len = bw_file.chroms().get(chroms[gene_index])
+                seq = bw_file.values(chroms[gene_index], gene_coords[gene_index][0] - halfspan , chrom_len) 
+
+        if downsample_size > 0:
+            downsampled = F.interpolate(torch.tensor(seq).unsqueeze(0).unsqueeze(0), size=downsample_size, mode='linear', align_corners=False).squeeze().detach().numpy()
+            X[gene_index, histone_index] = downsampled
+        else:
+            X[gene_index, histone_index] = seq
+
+
+
+def retrieve_all_histones(base_dir, histones_list, cell_line, X, gene_names, chroms, tss_centers, strands, gex, gene_coords=None, halfspan=10000, downsample=-1):
     for histone_index, histone in enumerate(histones_list):
 
         bigwig_file_path = os.path.join(base_dir,histone+'-bigwig','X'+str(cell_line)+'.bigwig')
@@ -53,7 +76,11 @@ def retrieve_all_histones(base_dir, histones_list, cell_line, X, gene_names, chr
             bigwig_file_path = os.path.join(base_dir,histone+'-bigwig','X'+str(cell_line)+'.bw')
             bw = pyBigWig.open(bigwig_file_path)
 
-        retrieve_histone_data(bw, X,  histone_index, gene_names, chroms, tss_centers, strands, gex, halfspan, downsample)
+        if gene_coords == None:
+            retrieve_histone_data(bw, X,  histone_index, gene_names, chroms, tss_centers, strands, gex, halfspan, downsample)
+        else:
+            retrieve_histone_data_around_gene(bw, X,  histone_index, gene_names, chroms, gene_coords, strands, gex, halfspan, downsample)
+
 
         bw.close()
 

@@ -2,16 +2,37 @@ import numpy as np
 import pyBigWig
 import pandas as pd
 import matplotlib.pyplot as plt
-from histone_data import load_gene_info
+from data import load_gene_info
 from scipy.stats import spearmanr
 import time
 import os
 from pathlib import Path
+import torch
+import torch.nn.functional as F
 
 
 
 def main():
-    gene_names, chrs, tss_centers, strands, gex = load_gene_info('train',1)
+    gene_names, chrs, tss_centers, gene_coords , strands, gex = load_gene_info('train',1)
+    # gene lengths:  mean: 75000 , median:30000,  std: 140000, max 2M, min 75
+
+    dnase_path = '/home/vegeta/Downloads/ML4G_Project_1_Data/DNase-bigwig/X1.bw'
+
+    dnase = pyBigWig.open(dnase_path)
+
+    i = 0
+    gene = dnase.values(chrs[i], gene_coords[i][0] - 2000, gene_coords[i][1] + 2000)
+
+    plt.plot(range(len(gene)),gene)
+    d = F.interpolate(torch.tensor(gene).unsqueeze(0).unsqueeze(0), size=20000, mode='linear', align_corners=False).squeeze().detach().numpy()
+    #plt.plot(range(len(d)),d)
+    plt.show()
+    plt.plot(range(len(d)),d)
+    plt.show()
+
+    exit()
+
+
     # max gex gene index -> 6269
     # min gex gene index -> 0
 
@@ -153,15 +174,5 @@ def main():
             plt.close()
         except Exception as e:
             print(f"An error occurred: {e}")
-
-
-
-    
-
-
-
-
-    
-
 
 main()
