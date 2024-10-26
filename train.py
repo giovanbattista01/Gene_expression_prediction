@@ -93,6 +93,20 @@ class SimpleDataset(Dataset):
         label = self.y[idx]
         return sample, label
 
+class TensorDataset(Dataset):
+    def __init__(self, X, y):
+        
+        self.X = torch.from_numpy(X).float()
+        self.y = torch.from_numpy(y).float()
+
+    def __len__(self):
+        return len(self.y)
+
+    def __getitem__(self, idx):
+        sample = self.X[idx]
+        label = self.y[idx]
+        return sample, label
+
 
 class HDF5Dataset(Dataset):
     def __init__(self, h5_file_path, transform=None):
@@ -207,7 +221,7 @@ def train_val (train_loader, val_loader, model, num_training_samples, num_val_sa
             print("validation Spearman : ",spearman)
             print("Mean validation loss: ",val_loss /num_val_samples)
 
-            print(val_prediction[:10])
+            #print(val_prediction[:10])
 
             if spearman > best_spearman and spearman > goal:
                 best_spearman = spearman
@@ -218,21 +232,27 @@ def train_val (train_loader, val_loader, model, num_training_samples, num_val_sa
 
 def expectoSetup():
     
-    base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/my_histone_data/old_data/'
+    base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/tss_data/'
     X_train_path = base_dir + 'X1_train.npy'
     y_train_path = base_dir + 'y1_train.npy'
 
     X_val_path = base_dir + 'X2_val.npy'
     y_val_path = base_dir + 'y2_val.npy'
 
-    X_train = torch.from_numpy(np.load(X_train_path)).float()
+    """X_train = torch.from_numpy(np.load(X_train_path)).float()
     y_train = torch.from_numpy(np.load(y_train_path)).float()
 
     X_val = torch.from_numpy(np.load(X_val_path)).float()
-    y_val = torch.from_numpy(np.load(y_val_path)).float()
+    y_val = torch.from_numpy(np.load(y_val_path)).float()"""
+
+    X_train = np.load(X_train_path)
+    y_train = np.load(y_train_path)
+
+    X_val = np.load(X_val_path)
+    y_val = np.load(y_val_path)
 
     width = X_train.shape[-1]
-    nhistones = 5
+    nhistones = 6
     nfilters = 50 #200 
     filtsize = 10 #20
     poolsize = 5
@@ -241,13 +261,13 @@ def expectoSetup():
     n_states_linear2 = 20  #20  125  #1000
     noutputs = 1
 
-    batch_size = 16
+    batch_size = 4
 
     #y_train = (y_train > 0).float()
-    train_dataset = SimpleDataset(X_train,y_train)
+    train_dataset = TensorDataset(X_train,y_train)
 
     #y_val = (y_val > 0).float()
-    val_dataset = SimpleDataset(X_val,y_val)
+    val_dataset = TensorDataset(X_val,y_val)
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)

@@ -69,15 +69,15 @@ def create_tss_data():
             np.save(save_dir + 'y' + str(cell_line) + '_' + mode, y)
 
 
-def generate_gene_x_y():
+def generate_gene_x_y(histones_list, base_dir='/home/vegeta/Downloads/ML4G_Project_1_Data', mode='train', cell_line=1, halfspan=2000, chosen_dim=20000):
     gene_names, chroms, _, gene_coords,  strands, gex = load_gene_info(mode,cell_line)
     X = np.memmap('X_data.memmap', dtype='float32', mode='w+', shape=(len(gene_names), len(histones_list) + 1, chosen_dim))
 
-    retrieve_all_histones(base_dir, histones_list, cell_line, X, gene_names, chroms, None, strands, gex,gene_coords=gene_coords, halfspan=2000,downsample_dim=20000)
+    retrieve_all_histones(base_dir, histones_list, cell_line, X, gene_names, chroms, None, strands, gex,gene_coords=gene_coords, halfspan=halfspan,downsample_size=chosen_dim)
 
     dnase_path = os.path.join(base_dir,'DNase-bigwig','X'+str(cell_line)+'.bw')
     dnase_file = pyBigWig.open(dnase_path)
-    retrieve_histone_data_around_gene(dnase_file, X,  len(histones_list), gene_names, chroms, gene_coords, strands, gex)
+    retrieve_histone_data_around_gene(dnase_file, X,  len(histones_list), gene_names, chroms, gene_coords, strands, gex, halfspan=halfspan ,downsample_size=chosen_dim)
 
     gex = np.array(gex)
     gex[np.isnan(gex)] = 0
@@ -102,9 +102,6 @@ def create_gene_data():
 
 def main():
     create_gene_data()
-
-
-
 
 
 

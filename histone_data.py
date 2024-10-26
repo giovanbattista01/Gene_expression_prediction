@@ -62,7 +62,7 @@ def retrieve_histone_data_around_gene(bw_file, X,  histone_index, gene_names, ch
 
 
 
-def retrieve_all_histones(base_dir, histones_list, cell_line, X, gene_names, chroms, tss_centers, strands, gex, gene_coords=None, halfspan=10000, downsample=-1):
+def retrieve_all_histones(base_dir, histones_list, cell_line, X, gene_names, chroms, tss_centers, strands, gex, gene_coords=None, halfspan=10000, downsample_size=-1):
     for histone_index, histone in enumerate(histones_list):
 
         bigwig_file_path = os.path.join(base_dir,histone+'-bigwig','X'+str(cell_line)+'.bigwig')
@@ -77,9 +77,9 @@ def retrieve_all_histones(base_dir, histones_list, cell_line, X, gene_names, chr
             bw = pyBigWig.open(bigwig_file_path)
 
         if gene_coords == None:
-            retrieve_histone_data(bw, X,  histone_index, gene_names, chroms, tss_centers, strands, gex, halfspan, downsample)
+            retrieve_histone_data(bw, X,  histone_index, gene_names, chroms, tss_centers, strands, gex, halfspan, downsample_size)
         else:
-            retrieve_histone_data_around_gene(bw, X,  histone_index, gene_names, chroms, gene_coords, strands, gex, halfspan, downsample)
+            retrieve_histone_data_around_gene(bw, X,  histone_index, gene_names, chroms, gene_coords, strands, gex, halfspan, downsample_size)
 
 
         bw.close()
