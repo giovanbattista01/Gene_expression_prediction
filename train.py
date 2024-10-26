@@ -11,7 +11,8 @@ import time
 import h5py
 from scipy.stats import spearmanr
 
-from expecto import ConvNetModel
+from cnns import ConvNetModel
+from cnns import DeepConvNet
 from enformer import Enformer
 
 
@@ -198,7 +199,7 @@ def train_val (train_loader, val_loader, model, num_training_samples, num_val_sa
                 f_X = model(X_batch)
 
                 val_prediction = torch.cat((val_prediction,f_X))
-                val_y = torch.cat((val_y,y_batch))
+                val_y = torch.cat((val_y,y_batch)) 
 
                 loss = criterion(f_X, y_batch)
 
@@ -217,7 +218,7 @@ def train_val (train_loader, val_loader, model, num_training_samples, num_val_sa
 
         time.sleep(2)
 
-def expectoSetup():
+def ConvNetSetup():
     
     base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/tss_data/'
     
@@ -280,12 +281,49 @@ def enformerSetup():
     return train_loader, val_loader, model, len(train_dataset), len(val_dataset)
 
 
+def DeepConvSetup():
+    
+    base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/tss_data/'
+    
+    train_path =  base_dir + 'train_data1.h5'
+    val_path = base_dir + 'val_data2.h5'
+
+    #y_train = (y_train > 0).float()
+    train_dataset = HDF5Dataset(train_path)
+
+    #y_val = (y_val > 0).float()
+    val_dataset = HDF5Dataset(val_path, mode='val')
+
+    width = train_dataset.seq_len
+    nfeatures = 6
+    filter_list = [5,50] 
+    filtsize_list = [10,10]
+    poolsize_list = [10,5]
+    padding_list = [filtsize // 2 for filtsize in filtsize_list]
+    n_states_linear1 = 50 
+    n_states_linear2 = 20  
+    noutputs = 1
+
+    batch_size = 8
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,num_workers=16)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True,num_workers=16)
+
+    model = DeepConvNet(width, nfeatures, filter_list, filtsize_list, padding_list, poolsize_list, n_states_linear1, n_states_linear2, noutputs)
+
+    n_training  = train_dataset.num_samples
+    n_validation  = val_dataset.num_samples
+
+    return train_loader, val_loader, model, n_training, n_validation
+
 
 def main():
-    chosen_model = 'expecto'
+    chosen_model = 'deep_conv'
 
-    if chosen_model == 'expecto':
-        train_loader, val_loader, model, num_training_samples, num_val_samples = expectoSetup()
+    if chosen_model == 'conv_net':
+        train_loader, val_loader, model, num_training_samples, num_val_samples = ConvNetSetup()
+    elif chosen_model == 'deep_conv':
+        train_loader, val_loader, model, num_training_samples, num_val_samples = DeepConvSetup()
     elif chosen_model == 'enformer':
         train_loader, val_loader, model, num_training_samples, num_val_samples = enformerSetup()
     else:
