@@ -93,34 +93,22 @@ class SimpleDataset(Dataset):
         label = self.y[idx]
         return sample, label
 
-class TensorDataset(Dataset):
-    def __init__(self, X, y):
-        
-        self.X = torch.from_numpy(X).float()
-        self.y = torch.from_numpy(y).float()
-
-    def __len__(self):
-        return len(self.y)
-
-    def __getitem__(self, idx):
-        sample = self.X[idx]
-        label = self.y[idx]
-        return sample, label
-
-
 class HDF5Dataset(Dataset):
-    def __init__(self, h5_file_path, transform=None):
+    def __init__(self, h5_file_path, mode='train', transform=None):
         
         self.h5_file_path = h5_file_path
         self.transform = transform
         
         self.h5_file = h5py.File(h5_file_path, 'r')
 
-        self.X = self.h5_file['dna_data']
-        self.y = self.h5_file['gex_data']
+        self.X = self.h5_file['X_'+mode]
+        self.y = self.h5_file['y_'+mode]
+
+        self.seq_len = self.X.shape[-1]
+        self.num_samples = self.y.shape[0]
 
     def __len__(self):
-        return min(8000,len(self.y))
+        return len(self.y)
     
     def __getitem__(self, idx):
         X = self.X[idx]
@@ -133,9 +121,6 @@ class HDF5Dataset(Dataset):
             data = self.transform(data)
         
         return X,y
-    
-    def close(self):
-        self.h5_file.close()
 
 
 def train_val (train_loader, val_loader, model, num_training_samples, num_val_samples):
@@ -187,6 +172,8 @@ def train_val (train_loader, val_loader, model, num_training_samples, num_val_sa
 
             train_loss += loss.item()
 
+            
+
         spearman = spearmanr(train_prediction.detach().cpu(),train_y.detach().cpu())
         print("train Spearman : ",spearman)
         print("Mean training loss: ",train_loss /num_training_samples)
@@ -233,25 +220,17 @@ def train_val (train_loader, val_loader, model, num_training_samples, num_val_sa
 def expectoSetup():
     
     base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/tss_data/'
-    X_train_path = base_dir + 'X1_train.npy'
-    y_train_path = base_dir + 'y1_train.npy'
+    
+    train_path =  base_dir + 'train_data1.h5'
+    val_path = base_dir + 'val_data2.h5'
 
-    X_val_path = base_dir + 'X2_val.npy'
-    y_val_path = base_dir + 'y2_val.npy'
+    #y_train = (y_train > 0).float()
+    train_dataset = HDF5Dataset(train_path)
 
-    """X_train = torch.from_numpy(np.load(X_train_path)).float()
-    y_train = torch.from_numpy(np.load(y_train_path)).float()
+    #y_val = (y_val > 0).float()
+    val_dataset = HDF5Dataset(val_path, mode='val')
 
-    X_val = torch.from_numpy(np.load(X_val_path)).float()
-    y_val = torch.from_numpy(np.load(y_val_path)).float()"""
-
-    X_train = np.load(X_train_path)
-    y_train = np.load(y_train_path)
-
-    X_val = np.load(X_val_path)
-    y_val = np.load(y_val_path)
-
-    width = X_train.shape[-1]
+    width = train_dataset.seq_len
     nhistones = 6
     nfilters = 50 #200 
     filtsize = 10 #20
@@ -261,21 +240,15 @@ def expectoSetup():
     n_states_linear2 = 20  #20  125  #1000
     noutputs = 1
 
-    batch_size = 4
+    batch_size = 8
 
-    #y_train = (y_train > 0).float()
-    train_dataset = TensorDataset(X_train,y_train)
-
-    #y_val = (y_val > 0).float()
-    val_dataset = TensorDataset(X_val,y_val)
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,num_workers=16)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True,num_workers=16)
 
     model = ConvNetModel(width, nhistones, nfilters, filtsize, padding, poolsize, n_states_linear1, n_states_linear2, noutputs)
 
-    n_training  = y_train.shape[0]
-    n_validation  = y_val.shape[0]
+    n_training  = train_dataset.num_samples
+    n_validation  = val_dataset.num_samples
 
     return train_loader, val_loader, model, n_training, n_validation
 

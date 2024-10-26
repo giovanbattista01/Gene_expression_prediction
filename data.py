@@ -6,7 +6,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import os
 from pathlib import Path
-
+import h5py
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
@@ -101,7 +101,35 @@ def create_gene_data():
 
 
 def main():
-    create_gene_data()
+
+    base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/tss_data/'
+
+
+    X_train_path = base_dir + 'X2_train.npy'
+    y_train_path = base_dir + 'y2_train.npy'
+    X_val_path = base_dir + 'X2_val.npy'
+    y_val_path = base_dir + 'y2_val.npy'
+
+    # Paths to the new .h5 files
+    train_h5_path = base_dir + 'train_data2.h5'
+    val_h5_path = base_dir +  'val_data2.h5'
+
+    # Load the .npy arrays
+    X_train = np.load(X_train_path)
+    y_train = np.load(y_train_path)
+    X_val = np.load(X_val_path)
+    y_val = np.load(y_val_path)
+
+    with h5py.File(train_h5_path, 'w') as f:
+        f.create_dataset('X_train', data=X_train, compression='gzip')
+        f.create_dataset('y_train', data=y_train, compression='gzip')
+
+    # Save validation data to h5
+    with h5py.File(val_h5_path, 'w') as f:
+        f.create_dataset('X_val', data=X_val, compression='gzip')
+        f.create_dataset('y_val', data=y_val, compression='gzip')
+
+    print("Conversion to h5 completed.")
 
 
 
