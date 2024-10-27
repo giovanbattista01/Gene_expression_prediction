@@ -107,10 +107,10 @@ def create_gene_data():
 
 # dataset with histones, dnase, positional encoding and dna information: 5+1+2+4=12
 def create_augmented_dataset(mode,cell_line):
-    batch_size = 30000
+    batch_size = 10000
     seq_len = 5000
-    stride = 3000
-    max_iter = 10
+    stride = 4000
+    max_iter = 500
     base_dir= '/home/vegeta/Downloads/ML4G_Project_1_Data/'
     save_dir = base_dir + 'augmented_data/'
     h5_file = h5py.File(save_dir+mode+str(cell_line)+'_augmented_dataset.h5', 'w')
@@ -236,7 +236,9 @@ def main():
     base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/_data/'
 
 
-    create_augmented_dataset('val',1)
+    create_augmented_dataset('val',2)
 
 
-main()
+
+if __name__ == "__main__":
+    main()
