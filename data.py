@@ -22,8 +22,10 @@ from dna_data import one_hot_encode
 
 def load_gene_info(mode,cell_line):   # mode can be train,val or test, cell_line can be 1,2,3
 
+
     base_dir = "/home/vegeta/Downloads/ML4G_Project_1_Data/CAGE-train/CAGE-train/"
     file_string = 'X'+str(cell_line)+'_'+mode
+
     
     info_path = os.path.join(base_dir, file_string + '_info.tsv' )
     y_path = os.path.join(base_dir, file_string + '_y.tsv' )
@@ -119,8 +121,8 @@ def create_augmented_dataset(mode,cell_line):
 
     dataset_X = h5_file.create_dataset(
         'X',            
-        shape=(0, num_features, seq_len ),  
-        maxshape=(None, num_features, seq_len),
+        shape=(0, 12, seq_len ),  
+        maxshape=(None, 12, seq_len),
         dtype='float32',       
         compression='gzip'
     )
@@ -151,7 +153,7 @@ def create_augmented_dataset(mode,cell_line):
 
         bw_file_list.append(bw)
 
-    for i in range(len(gene_names)):
+    for i in tqdm(range(len(gene_names))):
         
         c1, c2 = gene_coords[i][0], gene_coords[i][1]
         tss_center = tss_centers[i]
@@ -190,7 +192,7 @@ def create_augmented_dataset(mode,cell_line):
 
             l,r = l+stride, r+stride
 
-            dataset_Y[-1] = gex[i]
+            dataset_y[-1] = gex[i]
 
     h5_file.close()
 
@@ -203,8 +205,7 @@ def main():
     base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/_data/'
 
 
-    
+    create_augmented_dataset('train',1)
 
 
-
-#main()
+main()

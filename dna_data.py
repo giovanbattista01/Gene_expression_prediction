@@ -88,40 +88,42 @@ def create_dna_dataset(dataset, gex_dataset, fasta_file, chrs, tss_centers, stra
         gex_dataset[i] = gex[i]
 
 
-gene_names, chroms, tss_centers, strands, gex = load_gene_info('val',1)
+def main():
+
+    gene_names, chroms, tss_centers, strands, gex = load_gene_info('val',1)
 
 
-SEQ_LENGTH = 200000
+    SEQ_LENGTH = 200000
 
-NUM_SAMPLES = len(gene_names)
+    NUM_SAMPLES = len(gene_names)
 
-IN_CHANNELS = 4
+    IN_CHANNELS = 4
 
-base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/my_dna_data/'
+    base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/my_dna_data/'
 
-with h5py.File(base_dir + 'data1_val.h5', 'w') as h5file:
-    # Create a dataset for one-hot encoded nucleotides as int8
-    dataset = h5file.create_dataset(
-        'dna_data', 
-        (NUM_SAMPLES, SEQ_LENGTH, IN_CHANNELS), 
-        dtype='int8'  # Store as int8 for one-hot encoding
-    )
+    with h5py.File(base_dir + 'data1_val.h5', 'w') as h5file:
+        # Create a dataset for one-hot encoded nucleotides as int8
+        dataset = h5file.create_dataset(
+            'dna_data', 
+            (NUM_SAMPLES, SEQ_LENGTH, IN_CHANNELS), 
+            dtype='int8'  # Store as int8 for one-hot encoding
+        )
 
-    gex_dataset = h5file.create_dataset(
-        'gex_data',
-        (NUM_SAMPLES,),  
-        dtype='float32' 
-    )
+        gex_dataset = h5file.create_dataset(
+            'gex_data',
+            (NUM_SAMPLES,),  
+            dtype='float32' 
+        )
 
-    halfspan = int(SEQ_LENGTH // 2)
+        halfspan = int(SEQ_LENGTH // 2)
 
-    hg38_path = '/home/vegeta/Downloads/hg38.fa'
-
-
-    genome = Fasta(hg38_path)
+        hg38_path = '/home/vegeta/Downloads/hg38.fa'
 
 
-    create_dna_dataset(dataset, gex_dataset, genome, chroms, tss_centers, strands, gex, halfspan)
+        genome = Fasta(hg38_path)
+
+
+        create_dna_dataset(dataset, gex_dataset, genome, chroms, tss_centers, strands, gex, halfspan)
 
 
 
