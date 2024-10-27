@@ -70,7 +70,7 @@ def create_dna_dataset(dataset, gex_dataset, fasta_file, chrs, tss_centers, stra
         left = max(0, tss_centers[i] - halfspan)
         right = min(tss_centers[i] + halfspan, chrom_lengths[chrs[i]] -1 )
 
-        seq = genome[chrs[i]][left:right].seq
+        seq = fasta_file[chrs[i]][left:right].seq
 
         if left == 0:
             seq = pad(seq, 'left', halfspan - tss_centers[i] )
