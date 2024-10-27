@@ -107,6 +107,7 @@ def create_gene_data():
 
 # dataset with histones, dnase, positional encoding and dna information: 5+1+2+4=12
 def create_augmented_dataset(mode,cell_line):
+    batch_size = 30000
     seq_len = 5000
     stride = 3000
     max_iter = 10
@@ -121,8 +122,8 @@ def create_augmented_dataset(mode,cell_line):
 
     dataset_X = h5_file.create_dataset(
         'X',            
-        shape=(0, 12, seq_len ),  
-        maxshape=(None, 12, seq_len),
+        shape=(0, 12, seq_len ), 
+        maxshape=(None, 12, seq_len), 
         dtype='float32',       
         compression='gzip'
     )
@@ -130,8 +131,7 @@ def create_augmented_dataset(mode,cell_line):
     dataset_y = h5_file.create_dataset(
         'y',            
         shape=(0,),  
-        maxshape=(None,),
-        dtype='float32',       
+        maxshape=(None,),      
         compression='gzip'
     )
 
@@ -153,6 +153,9 @@ def create_augmented_dataset(mode,cell_line):
 
         bw_file_list.append(bw)
 
+    current_batch_X = []
+    current_batch_y = []
+
     for i in tqdm(range(len(gene_names))):
         
         c1, c2 = gene_coords[i][0], gene_coords[i][1]
@@ -164,23 +167,20 @@ def create_augmented_dataset(mode,cell_line):
 
         l,r = c1, c1+seq_len
 
-        for j in range(n_shards):
-            if j >= max_iter:
-                break
-
-            dataset_X.resize(dataset_X.shape[0] + 1, axis=0)
-            dataset_y.resize(dataset_y.shape[0] + 1, axis=0)
+        for j in range(min(n_shards, max_iter)):
             
+            seq_data = np.zeros((12, seq_len), dtype=np.float32)
+
             for k,bw in enumerate(bw_file_list):
 
-                seq = np.array(bw.values(chroms[i],l,r), dtype=np.float32)
-                dataset_X[-1,k,:] = seq
+                seq_data[k,:] = np.array(bw.values(chroms[i],l,r), dtype=np.float32)
+                
             # positional encoding here (tss and gene coords)
             tss_encoding = np.arange(l,r) - tss_center
             gene_encoding = np.arange(l,r) - c1
 
-            dataset_X[-1,len(bw_file_list),:] =  tss_encoding
-            dataset_X[-1,len(bw_file_list)+1,:] =  gene_encoding
+            seq_data[len(bw_file_list),:] =  tss_encoding
+            seq_data[len(bw_file_list)+1,:] =  gene_encoding
 
             # finally, the dna sequence:
 
@@ -188,11 +188,42 @@ def create_augmented_dataset(mode,cell_line):
             ohe = one_hot_encode(dna_seq)
 
             for base_index in range(4):
-                dataset_X[-1,-base_index-1,:] = ohe[:,base_index]
+                seq_data[-base_index-1,:] = ohe[:,base_index]
+
+            current_batch_X.append(seq_data)
+            current_batch_y.append(gex[i])
 
             l,r = l+stride, r+stride
 
-            dataset_y[-1] = gex[i]
+            if len(current_batch_X) >= batch_size:
+                # Convert to numpy arrays
+                batch_X = np.array(current_batch_X, dtype=np.float32)
+                batch_y = np.array(current_batch_y, dtype=np.float32)
+
+                # Resize the datasets
+                dataset_X.resize(dataset_X.shape[0] + batch_X.shape[0], axis=0)
+                dataset_y.resize(dataset_y.shape[0] + batch_y.shape[0], axis=0)
+
+                # Write the batch to the datasets
+                dataset_X[-batch_X.shape[0]:] = batch_X
+                dataset_y[-batch_y.shape[0]:] = batch_y
+
+                # Clear the current batch
+                current_batch_X = []
+                current_batch_y = []
+
+
+
+    # Write any remaining data in the last batch
+    if current_batch_X:
+        batch_X = np.array(current_batch_X, dtype=np.float32)
+        batch_y = np.array(current_batch_y, dtype=np.float32)
+
+        dataset_X.resize(dataset_X.shape[0] + batch_X.shape[0], axis=0)
+        dataset_y.resize(dataset_y.shape[0] + batch_y.shape[0], axis=0)
+
+        dataset_X[-batch_X.shape[0]:] = batch_X
+        dataset_y[-batch_y.shape[0]:] = batch_y
 
     h5_file.close()
 
@@ -205,7 +236,7 @@ def main():
     base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/_data/'
 
 
-    create_augmented_dataset('train',1)
+    create_augmented_dataset('val',1)
 
 
 main()
