@@ -102,8 +102,13 @@ class HDF5Dataset(Dataset):
         
         self.h5_file = h5py.File(h5_file_path, 'r')
 
-        self.X = self.h5_file['X_'+mode]
-        self.y = self.h5_file['y_'+mode]
+        try:
+            self.X = self.h5_file['X']
+            self.y = self.h5_file['y']
+
+        except:
+            self.X = self.h5_file['X_'+mode]
+            self.y = self.h5_file['y_'+mode]
 
         self.seq_len = self.X.shape[-1]
         self.num_samples = self.y.shape[0]
@@ -116,10 +121,10 @@ class HDF5Dataset(Dataset):
         y = self.y[idx]
         
         X = torch.tensor(X, dtype=torch.float32)
-        y = torch.tensor(y, dtype=torch.float32)
         
-        if self.transform:
-            data = self.transform(data)
+        if self.transform == 'binary':
+            y = 1 if y > 0 else 0
+        y = torch.tensor(y, dtype=torch.float32)
         
         return X,y
 
@@ -133,8 +138,8 @@ def train_val (train_loader, val_loader, model, num_training_samples, num_val_sa
     print(f"Using device: {device}")
     model.to(device)
     
-    criterion = RankNet1DLoss(model=model, l2_lambda=0.05)
-    #criterion = BCE_L2(model=model, l2_lambda=0.1)
+    #criterion = RankNet1DLoss(model=model, l2_lambda=0.05)
+    criterion = BCE_L2(model=model, l2_lambda=0.1)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     best_spearman = 0
@@ -281,7 +286,7 @@ def enformerSetup():
     return train_loader, val_loader, model, len(train_dataset), len(val_dataset)
 
 
-def DeepConvSetup():
+def DeepConvTssSetup():
     
     base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/tss_data/'
     
@@ -295,7 +300,7 @@ def DeepConvSetup():
     val_dataset = HDF5Dataset(val_path, mode='val')
 
     width = train_dataset.seq_len
-    nfeatures = 6
+    nfeatures = 12 #6
     filter_list = [5,50] 
     filtsize_list = [10,10]
     poolsize_list = [10,5]
@@ -316,6 +321,48 @@ def DeepConvSetup():
 
     return train_loader, val_loader, model, n_training, n_validation
 
+def DeepConvAugmentedSetup():
+    
+    base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/augmented_data/'
+    train_path = base_dir + 'train1_augmented_dataset.h5'
+    val_path = base_dir + 'val1_augmented_dataset.h5'
+    
+
+    #y_train = (y_train > 0).float()
+    train_dataset = HDF5Dataset(train_path,transform='binary')
+
+    #y_val = (y_val > 0).float()
+    val_dataset = HDF5Dataset(val_path, mode='val',transform='binary')
+
+    width = train_dataset.seq_len
+    nfeatures = 12 #6
+    filter_list = [5,50] 
+    filtsize_list = [10,10]
+    poolsize_list = [10,5]
+    padding_list = [filtsize // 2 for filtsize in filtsize_list]
+    n_states_linear1 = 50 
+    n_states_linear2 = 20  
+    noutputs = 1
+
+    batch_size = 8
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,num_workers=16)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True,num_workers=16)
+
+    model = DeepConvNet(width, nfeatures, filter_list, filtsize_list, padding_list, poolsize_list, n_states_linear1, n_states_linear2, noutputs)
+
+    n_training  = train_dataset.num_samples
+    n_validation  = val_dataset.num_samples
+
+    return train_loader, val_loader, model, n_training, n_validation
+
+
+
+
+"""
+train_path = base_dir + 'train1_augmented_dataset.h5'
+val_path = base_dir + 'val1_augmented_dataset.h5'
+"""
 
 def main():
     chosen_model = 'deep_conv'
