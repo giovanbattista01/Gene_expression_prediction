@@ -71,7 +71,22 @@ def get_feature_names(signals_list, thresholds, spans):
         list_gene_features.extend([f"{signal}_max", f"{signal}_min", f"{signal}_max_loc", f"{signal}_min_loc"])
 
 
-    list_features = list_gene_features + list_tss_features 
+    # additional features: 
+
+    additional_features = []
+
+    for i,signal in enumerate(signals_list):
+
+        additional_features.extend([f"{signal}_Peak-tss_distance",f"{signal}_promoter_Peak",f"{signal}_MaxGradient",f"{signal}_AvgGradient" ])
+
+        for j,signal2 in enumerate(signals_list):
+            if i >= j:
+                continue
+            additional_features.append(f"{signal}_{signal2}_Ratio")
+
+        
+
+    list_features = list_gene_features + list_tss_features + additional_features
 
     return list_features
 
@@ -112,8 +127,8 @@ def get_features_from_seq(dataset, gene_index, bw_files, chroms, tss_centers, ge
             dataset[f"{signal}_gene_Peak_{t}"][gene_index] = int(np.max(seq_gene) > t)
             dataset[f"{signal}_max"][gene_index] = np.max(seq_gene)
             dataset[f"{signal}_min"][gene_index] = np.min(seq_gene)
-            dataset[f"{signal}_max_loc"][gene_index] = np.argmax(seq_gene)
-            dataset[f"{signal}_min_loc"][gene_index] = np.argmin(seq_gene)
+            dataset[f"{signal}_max_loc"][gene_index] = np.argmax(seq_gene) / gene_len
+            dataset[f"{signal}_min_loc"][gene_index] = np.argmin(seq_gene) / gene_len
 
             # distance of the peak from the tss
 
@@ -147,7 +162,22 @@ def get_features_from_seq(dataset, gene_index, bw_files, chroms, tss_centers, ge
 
             dataset[f"{signal1}_{signal2}_Ratio"][gene_index] = promoter_peaks[i] / promoter_peaks[j]
 
-        
+    # max gradient around the tss can help understanding the region structure
+
+    for i,file in enumerate(bw_files):
+        tss = tss_centers[gene_index]- 25
+        s = 1000
+        seq_tss = np.array(bw_file.values(chroms[gene_index],tss-s,tss+s), dtype=np.float32) 
+
+        tss_gradient = np.gradient(seq_tss)
+        max_gradient = np.max(tss_gradient)
+        average_gradient = np.mean(tss_gradient)
+
+        signal = signals_list[i]
+
+        dataset[f"{signal}_MaxGradient"][gene_index] = max_gradient
+        dataset[f"{signal}_AvgGradient"][gene_index] = average_gradient
+
 
 def build_dataset(mode,cell_line):
 
@@ -296,7 +326,9 @@ def train_val():
     val.close()
 
 def main():
-    train_val()
+    #train_val()
+    build_dataset('train',2)
+    build_dataset('val',2)
 
 
 
