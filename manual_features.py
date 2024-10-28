@@ -7,9 +7,47 @@ from pathlib import Path
 import pyBigWig
 from tqdm import tqdm
 import h5py
+from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.metrics import accuracy_score, classification_report
+from scipy.stats import spearmanr
+
+from Bio import SeqIO
 
 
-def get_features_names(signals_list, thresholds, spans):
+def calculate_gc_content(sequence):
+    """Calculate the GC content of a given DNA sequence."""
+    gc_count = sequence.count("G") + sequence.count("C")
+    return gc_count / len(sequence) if len(sequence) > 0 else 0
+
+def calculate_cpg_ratio(sequence):
+    """Calculate the observed-to-expected CpG ratio for a given sequence."""
+    c_count = sequence.count("C")
+    g_count = sequence.count("G")
+    cg_count = sequence.count("CG")
+    if c_count * g_count > 0:
+        return (cg_count * len(sequence)) / (c_count * g_count)
+    else:
+        return 0
+
+def detect_cpg_islands(sequence, window_size=200, gc_threshold=0.5, cpg_ratio_threshold=0.6):
+    """Detect CpG islands in a given DNA sequence using a sliding window approach."""
+    cpg_islands = []
+    for i in range(len(sequence) - window_size + 1):
+        window_seq = sequence[i:i + window_size]
+        gc_content = calculate_gc_content(window_seq)
+        cpg_ratio = calculate_cpg_ratio(window_seq)
+        
+        if gc_content >= gc_threshold and cpg_ratio >= cpg_ratio_threshold:
+            cpg_islands.append((i, i + window_size))
+    return cpg_islands
+
+
+
+def get_feature_names(signals_list, thresholds, spans):
     list_gene_features = ['gene_len', 'strand', 'closeness_to_other_genes']
 
     list_tss_features = [] 
@@ -53,7 +91,7 @@ def get_features_from_seq(dataset, gene_index, bw_files, chroms, tss_centers, ge
     try:
         min_distance = min(np.min(left_distances[left_distances > 0]), np.min(right_distances[right_distances > 0]))
     except ValueError:
-        min_distance = np.inf
+        min_distance = 1e10
     dataset['closeness_to_other_genes'][gene_index] = min_distance
 
 
@@ -77,6 +115,40 @@ def get_features_from_seq(dataset, gene_index, bw_files, chroms, tss_centers, ge
             dataset[f"{signal}_max_loc"][gene_index] = np.argmax(seq_gene)
             dataset[f"{signal}_min_loc"][gene_index] = np.argmin(seq_gene)
 
+            # distance of the peak from the tss
+
+            dataset[f"{signal}_Peak-tss_distance"][gene_index] = (np.argmax(seq_gene) + c[0]) - (tss_centers[gene_index] - 25)
+
+
+    # ADDITIONAL FEATURES
+
+    promoter_peaks = []
+
+    # promoter region peaks
+
+    for i,file in enumerate(bw_files):
+        tss = tss_centers[gene_index]-25
+        promoter_size = 1000
+        promoter_region  = np.array(file.values(chroms[gene_index],tss - promoter_size,tss), dtype=np.float32)
+        peak = np.max(promoter_region)
+        signal = signals_list[i]
+        dataset[f"{signal}_promoter_Peak"][gene_index] = peak
+
+        promoter_peaks.append(peak) 
+
+    # histone modification ratios
+
+    for i,file1 in enumerate(bw_files):
+        for j,file2 in enumerate(bw_files):
+            if i >= j:
+                continue
+            signal1 = signals_list[i]
+            signal2 = signals_list[j]
+
+            dataset[f"{signal1}_{signal2}_Ratio"][gene_index] = promoter_peaks[i] / promoter_peaks[j]
+
+        
+
 def build_dataset(mode,cell_line):
 
     print("building manual features dataset")
@@ -93,7 +165,7 @@ def build_dataset(mode,cell_line):
 
     gene_names, chroms, tss_centers, gene_coords , strands, gex = load_gene_info(mode,cell_line)
 
-    feature_names = get_features_names(signals_list, thresholds, spans)
+    feature_names = get_feature_names(signals_list, thresholds, spans)
 
     with h5py.File(save_dir + f'X{cell_line}_{mode}.h5', 'w') as hdf5_file:
         dataset = {name: hdf5_file.create_dataset(name, shape=(len(gene_names),), dtype='f') for name in feature_names}
@@ -116,8 +188,115 @@ def build_dataset(mode,cell_line):
         # Close all bigWig files
         for bw in bw_files:
             bw.close()
+
+
+def get_data(feature_names, train, val, n_train, n_val,skip=-1):
+
+    if skip != -1:
+        new  = []
+        for f in feature_names:
+            if 'H3' in f:
+                new.append(f)
+        feature_names = new
+        print(feature_names)
+    
+    X_train = np.zeros((n_train,len(feature_names)))
+    X_val = np.zeros((n_val,len(feature_names)))
+
+    for i,feature in enumerate(feature_names):
+        X_train[:,i] = train[feature][:]
+        X_val[:,i] = val[feature][:]
+
+    X_train[np.isnan(X_train)] = 0
+    X_val[np.isnan(X_val)] = 0
+
+    X_train[X_train==np.inf] = 1e10
+    X_val[X_val==np.inf] = 1e10
+
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_val = scaler.transform(X_val)
+
+    return X_train, X_val
+
+
+def train_val():
+    base_dir = "/home/vegeta/Downloads/ML4G_Project_1_Data/manual_feature_data/"
+    train = h5py.File(base_dir+"X1_train.h5",'r')
+    val = h5py.File(base_dir+"X1_val.h5",'r')
+
+    y_train = np.load("/home/vegeta/Downloads/ML4G_Project_1_Data/my_histone_data/old_data/y1_train.npy")
+    y_val = np.load("/home/vegeta/Downloads/ML4G_Project_1_Data/my_histone_data/old_data/y1_val.npy")
+
+    y_train[np.isnan(y_train)] = 0
+    y_val[np.isnan(y_val)] = 0
+
+    signals_list = ['H3K4me3','H3K4me1','H3K36me3','H3K9me3','H3K27me3','DNase']
+
+    thresholds = [1,5,10]
+
+    spans = [50,500,5000]
+
+
+    feature_names = get_feature_names(signals_list, thresholds, spans)
+
+    X_train, X_val = get_data(feature_names, train, val, y_train.shape[0],y_val.shape[0])
+
+    y_train_bin = (y_train > 0 ).astype(int)
+    y_val_bin = (y_val > 0 ).astype(int)
+
+
+    log_reg = LogisticRegression(max_iter=100000)  
+    log_reg.fit(X_train, y_train_bin)
+
+
+    y_pred = log_reg.predict(X_val)
+
+    print(f"Accuracy: {accuracy_score(y_val_bin, y_pred)}")
+    print(classification_report(y_val_bin, y_pred))
+    print("spearman bin ",spearmanr(y_val_bin,y_pred))
+    print("spearman ",spearmanr(y_val,y_pred))
+
+
+    n_important = 10
+
+    X_train_df = pd.DataFrame(X_train, columns=feature_names)
+    feature_importance_log_reg = np.abs(log_reg.coef_[0])
+    importance_df_log_reg = pd.DataFrame({
+        "Feature": X_train_df.columns,
+        "Importance": feature_importance_log_reg
+    }).sort_values(by="Importance", ascending=False)
+    print("Feature Importance (Logistic Regression):\n", importance_df_log_reg[:n_important])
+
+    top_features = importance_df_log_reg[:n_important]['Feature'].tolist()
+
+    coefficients = log_reg.coef_[0]  # Coefficients for each feature
+    for i, coef in enumerate(coefficients):
+        print(f"Feature {i + 1}: {'Positive' if coef > 0 else 'Negative' if coef < 0 else 'Neutral'} effect (Coefficient = {coef})")
+
+    
+    print("retrain  with only important parameters ...")
+
+
+    X_train, X_val = get_data(top_features, train, val, y_train.shape[0],y_val.shape[0])
+
+    log_reg = LogisticRegression(max_iter=100000)  
+    log_reg.fit(X_train, y_train_bin)
+
+
+    y_pred = log_reg.predict(X_val)
+
+    print(f"Accuracy: {accuracy_score(y_val_bin, y_pred)}")
+    print(classification_report(y_val_bin, y_pred))
+    print("spearman bin ",spearmanr(y_val_bin,y_pred))
+    print("spearman ",spearmanr(y_val,y_pred))
+
+
+    train.close()
+    val.close()
+
 def main():
-    build_dataset('val',1)
+    train_val()
 
 
 

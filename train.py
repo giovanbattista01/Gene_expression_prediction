@@ -15,6 +15,8 @@ from cnns import ConvNetModel
 from cnns import DeepConvNet
 from enformer import Enformer
 
+from sklearn.metrics import roc_auc_score, confusion_matrix
+
 
 class BCE_L2(nn.Module):
     def __init__(self, model = None, l2_lambda=0):
@@ -129,7 +131,7 @@ class HDF5Dataset(Dataset):
         return X,y
 
 
-def train_val (train_loader, val_loader, model, num_training_samples, num_val_samples):
+def train_val (train_loader, val_loader, model, num_training_samples, num_val_samples, crit="rank_loss"):
 
     learning_rate = 0.0001
     num_epochs = 20
@@ -138,8 +140,13 @@ def train_val (train_loader, val_loader, model, num_training_samples, num_val_sa
     print(f"Using device: {device}")
     model.to(device)
     
-    #criterion = RankNet1DLoss(model=model, l2_lambda=0.05)
-    criterion = BCE_L2(model=model, l2_lambda=0.1)
+    if crit == "rank_loss":
+        criterion = RankNet1DLoss(model=model, l2_lambda=0.05)
+    elif crit  == "bce_loss":
+        criterion = BCE_L2(model=model, l2_lambda=0.1)
+    else:
+        print("error")
+
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     best_spearman = 0
@@ -184,6 +191,13 @@ def train_val (train_loader, val_loader, model, num_training_samples, num_val_sa
         print("train Spearman : ",spearman)
         print("Mean training loss: ",train_loss /num_training_samples)
 
+        if crit == "bce_loss":
+                train_y = train_y.detach().cpu()
+                train_pred = torch.sigmoid(train_prediction).detach().cpu()
+                train_pred = (train_pred  > 0.5).int()   
+                tn, fp, fn, tp = confusion_matrix(train_y,train_pred).ravel()
+                print("tn, fp, fn, tp : ",tn,fp,fn,tp)
+
         time.sleep(2)
 
         print("validation...")
@@ -214,6 +228,13 @@ def train_val (train_loader, val_loader, model, num_training_samples, num_val_sa
             print("validation Spearman : ",spearman)
             print("Mean validation loss: ",val_loss /num_val_samples)
 
+            if crit == "bce_loss":
+                val_y = val_y.detach().cpu()
+                val_pred = torch.sigmoid(val_prediction).detach().cpu()
+                val_pred = (val_pred  > 0.5).int()   
+                tn, fp, fn, tp = confusion_matrix(val_y, val_pred).ravel()
+                print("tn, fp, fn, tp : ",tn,fp,fn,tp)
+
             #print(val_prediction[:10])
 
             if spearman > best_spearman and spearman > goal:
@@ -225,6 +246,8 @@ def train_val (train_loader, val_loader, model, num_training_samples, num_val_sa
 
 def ConvNetSetup():
     
+    crit = "rank_loss"
+
     base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/tss_data/'
     
     train_path =  base_dir + 'train_data1.h5'
@@ -256,7 +279,7 @@ def ConvNetSetup():
     n_training  = train_dataset.num_samples
     n_validation  = val_dataset.num_samples
 
-    return train_loader, val_loader, model, n_training, n_validation
+    return train_loader, val_loader, model, n_training, n_validation, crit
 
 
 def enformerSetup():
@@ -288,6 +311,8 @@ def enformerSetup():
 
 def DeepConvTssSetup():
     
+    crit = "rank_loss"
+
     base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/tss_data/'
     
     train_path =  base_dir + 'train_data1.h5'
@@ -319,9 +344,11 @@ def DeepConvTssSetup():
     n_training  = train_dataset.num_samples
     n_validation  = val_dataset.num_samples
 
-    return train_loader, val_loader, model, n_training, n_validation
+    return train_loader, val_loader, model, n_training, n_validation, crit
 
 def DeepConvAugmentedSetup():
+
+    crit = "bce_loss"
     
     base_dir = '/home/vegeta/Downloads/ML4G_Project_1_Data/augmented_data/'
     train_path = base_dir + 'train1_augmented_dataset.h5'
@@ -336,12 +363,12 @@ def DeepConvAugmentedSetup():
 
     width = train_dataset.seq_len
     nfeatures = 12 #6
-    filter_list = [5,50] 
+    filter_list = [50,100] 
     filtsize_list = [10,10]
     poolsize_list = [10,5]
     padding_list = [filtsize // 2 for filtsize in filtsize_list]
-    n_states_linear1 = 50 
-    n_states_linear2 = 20  
+    n_states_linear1 = 600 
+    n_states_linear2 = 100  
     noutputs = 1
 
     batch_size = 8
@@ -354,30 +381,28 @@ def DeepConvAugmentedSetup():
     n_training  = train_dataset.num_samples
     n_validation  = val_dataset.num_samples
 
-    return train_loader, val_loader, model, n_training, n_validation
+    return train_loader, val_loader, model, n_training, n_validation, crit
 
 
 
 
-"""
-train_path = base_dir + 'train1_augmented_dataset.h5'
-val_path = base_dir + 'val1_augmented_dataset.h5'
-"""
 
 def main():
-    chosen_model = 'deep_conv'
+    chosen_model = 'deep_conv_augmented'
 
     if chosen_model == 'conv_net':
-        train_loader, val_loader, model, num_training_samples, num_val_samples = ConvNetSetup()
-    elif chosen_model == 'deep_conv':
-        train_loader, val_loader, model, num_training_samples, num_val_samples = DeepConvSetup()
+        train_loader, val_loader, model, num_training_samples, num_val_samples, crit = ConvNetSetup()
+    elif chosen_model == 'deep_conv_tss':
+        train_loader, val_loader, model, num_training_samples, num_val_samples, crit = DeepConvTssSetup()
+    elif chosen_model == 'deep_conv_augmented':
+        train_loader, val_loader, model, num_training_samples, num_val_samples, crit = DeepConvAugmentedSetup()
     elif chosen_model == 'enformer':
-        train_loader, val_loader, model, num_training_samples, num_val_samples = enformerSetup()
+        train_loader, val_loader, model, num_training_samples, num_val_samples, crit = enformerSetup()
     else:
         print("model is not valid")
         exit()
     
-    train_val(train_loader, val_loader, model, num_training_samples, num_val_samples)
+    train_val(train_loader, val_loader, model, num_training_samples, num_val_samples, crit = crit)
 
 
 main()
