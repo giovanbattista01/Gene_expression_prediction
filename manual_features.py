@@ -11,8 +11,11 @@ from sklearn.linear_model import LinearRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.metrics import accuracy_score, classification_report
+from xgboost import XGBClassifier
+
 from scipy.stats import spearmanr
 
 from Bio import SeqIO
@@ -50,18 +53,16 @@ def detect_cpg_islands(sequence, window_size=200, gc_threshold=0.5, cpg_ratio_th
 def get_feature_names(signals_list, thresholds, spans):
     list_gene_features = ['gene_len', 'strand', 'closeness_to_other_genes']
 
-    list_tss_features = [] 
-
                                             ### LEGEND ###
 
     # tss_Peak_-50:50_1  means this is a binary feature that it's 1 if max(signal) around the tss (-50:50) > 1
 
-    for signal in signals_list:
-        for t in thresholds:
-            for s in spans:
-                list_tss_features.append(f"{signal}_tss_Peak_-{s}:{s}_{t}")
-        
-
+    list_tss_features = [
+        f"{signal}_tss_Peak_-{s}:{s}_{t}" 
+        for signal in signals_list 
+        for t in thresholds 
+        for s in spans
+    ]
 
     # additionally, let's keep tracks of peaks in the gene area
 
@@ -221,7 +222,6 @@ def build_dataset(mode,cell_line):
 
 
 def get_data(feature_names, train, val, n_train, n_val,skip=-1):
-
     if skip != -1:
         new  = []
         for f in feature_names:
@@ -252,11 +252,11 @@ def get_data(feature_names, train, val, n_train, n_val,skip=-1):
 
 def train_val():
     base_dir = "/home/vegeta/Downloads/ML4G_Project_1_Data/manual_feature_data/"
-    train = h5py.File(base_dir+"X1_train.h5",'r')
-    val = h5py.File(base_dir+"X1_val.h5",'r')
+    train = h5py.File(base_dir+"X2_train.h5",'r')
+    val = h5py.File(base_dir+"X2_val.h5",'r')
 
-    y_train = np.load("/home/vegeta/Downloads/ML4G_Project_1_Data/my_histone_data/old_data/y1_train.npy")
-    y_val = np.load("/home/vegeta/Downloads/ML4G_Project_1_Data/my_histone_data/old_data/y1_val.npy")
+    y_train = np.load("/home/vegeta/Downloads/ML4G_Project_1_Data/my_histone_data/old_data/y2_train.npy")
+    y_val = np.load("/home/vegeta/Downloads/ML4G_Project_1_Data/my_histone_data/old_data/y2_val.npy")
 
     y_train[np.isnan(y_train)] = 0
     y_val[np.isnan(y_val)] = 0
@@ -276,7 +276,7 @@ def train_val():
     y_val_bin = (y_val > 0 ).astype(int)
 
 
-    log_reg = LogisticRegression(max_iter=100000)  
+    log_reg = LogisticRegression(penalty='l2', C=0.01,max_iter=100000)  
     log_reg.fit(X_train, y_train_bin)
 
 
@@ -288,10 +288,10 @@ def train_val():
     print("spearman ",spearmanr(y_val,y_pred))
 
 
-    n_important = 10
+    n_important = 20
 
     X_train_df = pd.DataFrame(X_train, columns=feature_names)
-    feature_importance_log_reg = np.abs(log_reg.coef_[0])
+    feature_importance_log_reg = np.abs(log_reg.coef_[0]) 
     importance_df_log_reg = pd.DataFrame({
         "Feature": X_train_df.columns,
         "Importance": feature_importance_log_reg
@@ -310,7 +310,7 @@ def train_val():
 
     X_train, X_val = get_data(top_features, train, val, y_train.shape[0],y_val.shape[0])
 
-    log_reg = LogisticRegression(max_iter=100000)  
+    log_reg = LogisticRegression(penalty='l2', C=1.0,max_iter=100000)  
     log_reg.fit(X_train, y_train_bin)
 
 
@@ -322,13 +322,23 @@ def train_val():
     print("spearman ",spearmanr(y_val,y_pred))
 
 
+    """rf_classifier = RandomForestClassifier(n_estimators=1000, random_state=42)  
+    rf_classifier.fit(X_train, y_train_bin)
+
+    y_pred = rf_classifier.predict(X_val)
+
+    print(f"Accuracy: {accuracy_score(y_val_bin, y_pred)}")
+    print(classification_report(y_val_bin, y_pred))
+    print("Spearman correlation (binary): ", spearmanr(y_val_bin, y_pred))
+    print("Spearman correlation (regression): ", spearmanr(y_val, y_pred))"""
+
+
     train.close()
     val.close()
 
 def main():
-    #train_val()
-    build_dataset('train',2)
-    build_dataset('val',2)
+    train_val()
+
 
 
 
