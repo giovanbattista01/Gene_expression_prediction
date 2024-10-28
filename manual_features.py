@@ -281,11 +281,15 @@ def train_val():
 
 
     y_pred = log_reg.predict(X_val)
+    y_proba = log_reg.predict_proba(X_val)[:,1]
 
     print(f"Accuracy: {accuracy_score(y_val_bin, y_pred)}")
     print(classification_report(y_val_bin, y_pred))
     print("spearman bin ",spearmanr(y_val_bin,y_pred))
     print("spearman ",spearmanr(y_val,y_pred))
+    print("spearman ",spearmanr(y_val,y_proba))
+
+    print(y_proba[:10])
 
 
     n_important = 20
@@ -315,11 +319,13 @@ def train_val():
 
 
     y_pred = log_reg.predict(X_val)
+    y_proba = log_reg.predict_proba(X_val)[:,1]
 
     print(f"Accuracy: {accuracy_score(y_val_bin, y_pred)}")
     print(classification_report(y_val_bin, y_pred))
     print("spearman bin ",spearmanr(y_val_bin,y_pred))
     print("spearman ",spearmanr(y_val,y_pred))
+    print("spearman ",spearmanr(y_val,y_proba))
 
 
     """rf_classifier = RandomForestClassifier(n_estimators=1000, random_state=42)  
